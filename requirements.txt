@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+motor
+pydantic[email]
+pydantic-settings
+PyJWT
+passlib[argon2]
+python-dotenv

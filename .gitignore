@@ -1,0 +1,4 @@
+app/core/__init__.py
+__pycache__/
+*.py[cod]
+.venv/
