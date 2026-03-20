@@ -1,39 +1,73 @@
+# app/main.py
+from contextlib import asynccontextmanager
+import os
+from app.core.scheduler import get_scheduler, init_scheduler
+from app.core.notify import init_firebase
+from app.jobs.appointment_reminders import run_reminders
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .core.config import settings
-from .db.mongo import connect_to_mongo, close_mongo_connection
-from .db.init_indexes import ensure_indexes
-from .routers import auth, users, health
-from .routers import patients, appointments  # <-- añade esto
 
+from app.core.config import settings                 # <--- aquí
+from app.db.mongo import connect_to_mongo, close_mongo_connection
+from app.db.init_indexes import ensure_indexes
 
-def create_app() -> FastAPI:
-    app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION)
+# routers...
+from app.routers import (
+    health as health_router,
+    auth as auth_router,
+    users as users_router,
+    patients as patients_router,
+    appointments as appointments_router,
+    plans as plans_router,
+    devices as devices_router,
+    google_oauth as google_router,
+    me as me_router,
+)
 
-    if settings.CORS_ORIGINS:
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=settings.CORS_ORIGINS,
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await connect_to_mongo(settings.MONGO_URI, settings.MONGO_DB)
+    await ensure_indexes()
+    init_firebase()
+    init_scheduler()
+    sched = get_scheduler()
+    sched.add_job(run_reminders, "interval", minutes=1, id="appointment_reminders", replace_existing=True)
+    yield
+    await close_mongo_connection()
 
-    @app.on_event("startup")
-    async def startup():
-        await connect_to_mongo()
-        await ensure_indexes()
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    lifespan=lifespan,
+)
 
-    @app.on_event("shutdown")
-    async def shutdown():
-        await close_mongo_connection()
+# Permitir HTTP solo fuera de prod (para localhost)
+if settings.APP_ENV.lower() not in ("prod", "production"):
+    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
-    app.include_router(health.router)
-    app.include_router(auth.router)
-    app.include_router(users.router)
-    app.include_router(patients.router)       # <-- añade
-    app.include_router(appointments.router)   # <-- añade
+# CORS
+cors_origins = list(settings.CORS_ORIGINS or [])
+if not cors_origins:
+    cors_origins = ["*"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    return app
+# Routers
+app.include_router(health_router.router, tags=["health"])
+app.include_router(auth_router.router, tags=["auth"])
+app.include_router(users_router.router, tags=["users"])
+app.include_router(patients_router.router, tags=["patients"])
+app.include_router(appointments_router.router, tags=["appointments"])
+app.include_router(plans_router.router, tags=["plans"])
+app.include_router(devices_router.router)
+app.include_router(google_router.router)
+app.include_router(me_router.router, tags=["me"])
 
-app = create_app()
+@app.get("/")
+async def root():
+    return {"ok": True, "service": settings.APP_NAME, "version": settings.APP_VERSION}

@@ -12,3 +12,11 @@ class LoginIn(BaseModel):
 class TokenPair(BaseModel):
     access: str
     refresh: str
+
+class RefreshIn(BaseModel):
+    refresh_token: str
+
+class TokensOut(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"

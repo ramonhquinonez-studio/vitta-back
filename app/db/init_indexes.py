@@ -1,16 +1,54 @@
-from . import mongo
+# app/db/init_indexes.py
+from app.db.mongo import get_db
 
-async def ensure_indexes():
-    if mongo.db is None:
-        await mongo.connect_to_mongo()
+async def ensure_indexes() -> None:
+    """
+    Crea los índices necesarios para rendimiento e integridad.
+    Se llama en startup, después de conectar a Mongo.
+    """
+    db = get_db()
 
-    # users
-    await mongo.db.users.create_index("email", unique=True)
+    # ---------- USERS ----------
+    # email único
+    await db.users.create_index("email", unique=True)
 
-    # patients: owner_id + name (búsquedas rápidas por nombre dentro de la nutrióloga)
-    await mongo.db.patients.create_index([("owner_id", 1), ("name", 1)])
+    # ---------- PATIENTS ----------
+    # Búsqueda por nombre y correo (ajusta campos que realmente guardes)
+    await db.patients.create_index([("owner_id", 1), ("name", 1)])
+    await db.patients.create_index("email")
+    await db.patients.create_index("user_id")  # vínculo paciente-usuario
 
-    # appointments: owner_id + start (para queries por rango de fechas)
-    await mongo.db.appointments.create_index([("owner_id", 1), ("start", 1)])
-    # y filtro por patient_id frecuente
-    await mongo.db.appointments.create_index([("owner_id", 1), ("patient_id", 1), ("start", 1)])
+    # ---------- APPOINTMENTS ----------
+    # Consultas comunes: por paciente, por estado y por fecha
+    await db.appointments.create_index("patient_id")
+    await db.appointments.create_index("status")
+    await db.appointments.create_index("start")
+    # Índice compuesto para listar por paciente ordenado por fecha
+    await db.appointments.create_index([("patient_id", 1), ("start", -1)])
+    await db.appointments.create_index([("owner_id", 1), ("start", 1)])
+
+    # ---------- PLANS ----------
+    await db.plans.create_index("name")
+    await db.plans.create_index("goal")
+    # Para búsqueda por ingrediente dentro de meals.items
+    await db.plans.create_index([("meals.items.name", 1)])
+    await db.plans.create_index([("owner_id", 1), ("updated_at", -1)])
+    await db.plan_assignments.create_index([("owner_id", 1), ("patient_id", 1)])
+
+
+    # ---------- PLAN ASSIGNMENTS ----------
+    await db.plan_assignments.create_index("plan_id")
+    await db.plan_assignments.create_index("patient_id")
+    await db.plan_assignments.create_index([("patient_id", 1), ("plan_id", 1)], unique=False)
+
+    # ---------- MEASUREMENTS (for progress) ----------
+    await db.measurements.create_index([("patient_id", 1), ("at", 1)])
+
+
+    # ---------- NOTIFICATIONS----------
+
+    await db.devices.create_index([("user_id", 1), ("token", 1)], unique=True)
+
+
+    await db.google_tokens.create_index("user_id", unique=True)
+    await db.google_tokens.create_index("provider", name="provider")  # opcional

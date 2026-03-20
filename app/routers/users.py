@@ -1,24 +1,37 @@
 from fastapi import APIRouter, Depends, HTTPException
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
-from ..core.deps import get_current_user
-from ..db import mongo
-from ..schemas.users import UserOut
+from typing import Any, Dict, Optional
+
+from ..core.deps import get_db, get_current_user
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-@router.get("/me", response_model=UserOut)
-async def me(current=Depends(get_current_user)):
-    # Asegura conexión (por si alguien llama sin startup)
-    if mongo.db is None:
-        await mongo.connect_to_mongo()
+def _uid_from_current(current: Dict[str, Any]) -> ObjectId:
+    uid = current.get("sub") or current.get("id")
+    if not uid:
+        raise HTTPException(status_code=401, detail="Invalid user payload")
+    try:
+        return ObjectId(uid)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid user id")
 
-    user_id = current["sub"]
-    user = await mongo.db.users.find_one({"_id": ObjectId(user_id)})
+def _serialize_user(u: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": str(u["_id"]),
+        "email": u.get("email"),
+        "name": u.get("name"),
+        "role": u.get("role", "pro"),
+        "created_at": u.get("created_at"),
+    }
+
+@router.get("/me", response_model=Dict[str, Any])
+async def me(
+    current = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    uid = _uid_from_current(current)
+    user = await db.users.find_one({"_id": uid})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return UserOut(
-        id=str(user["_id"]),
-        name=user["name"],
-        email=user["email"],
-        role=user.get("role", "nutritionist")
-    )
+    return _serialize_user(user)

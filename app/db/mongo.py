@@ -1,16 +1,25 @@
+# app/db/mongo.py
+from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
-from ..core.config import settings
 
-mongo_client: AsyncIOMotorClient | None = None
-db: AsyncIOMotorDatabase | None = None
+_client: Optional[AsyncIOMotorClient] = None
+_db: Optional[AsyncIOMotorDatabase] = None
 
-async def connect_to_mongo():
-    global mongo_client, db
-    mongo_client = AsyncIOMotorClient(settings.MONGO_URI)
-    db = mongo_client[settings.MONGO_DB]
+async def connect_to_mongo(uri: str, db_name: str) -> None:
+    """Conecta y deja disponible get_db()."""
+    global _client, _db
+    _client = AsyncIOMotorClient(uri)
+    _db = _client[db_name]
 
-async def close_mongo_connection():
-    global mongo_client
-    if mongo_client:
-        mongo_client.close()
-        mongo_client = None
+async def close_mongo_connection() -> None:
+    """Cierra la conexión (para shutdown)."""
+    global _client
+    if _client:
+        _client.close()
+        _client = None
+
+def get_db() -> AsyncIOMotorDatabase:
+    """Obtén la DB actual (levanta si no está inicializada)."""
+    if _db is None:
+        raise RuntimeError("MongoDB is not initialized. Did startup run?")
+    return _db
