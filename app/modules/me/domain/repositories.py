@@ -64,6 +64,9 @@ class MeRepository(Protocol):
     async def list_recipe_collections(self, owner_id: str | None) -> list[dict]:
         ...
 
+    async def get_recipe_for_owner(self, owner_id: str | None, recipe_id: str) -> dict | None:
+        ...
+
     async def list_education_videos(self, owner_id: str | None) -> list[dict]:
         ...
 

@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.deps import get_current_user
+from app.core.storage import save_upload
 from app.db.mongo import get_db
 from app.schemas.pagination import Page, PaginationParams
 from app.schemas.patients import PatientIn, PatientOut, PatientUpdate
@@ -120,3 +123,73 @@ async def delete_patient(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True}
+
+
+@router.post("/{patient_id}/body_compositions", response_model=dict, status_code=201)
+async def add_patient_body_composition(
+    patient_id: str,
+    at: datetime | None = Form(None),
+    provider: str | None = Form(None),
+    weight_kg: float | None = Form(None),
+    body_fat_pct: float | None = Form(None),
+    skeletal_muscle_kg: float | None = Form(None),
+    body_fat_mass_kg: float | None = Form(None),
+    total_body_water_l: float | None = Form(None),
+    protein_kg: float | None = Form(None),
+    minerals_kg: float | None = Form(None),
+    bmi: float | None = Form(None),
+    visceral_fat_level: float | None = Form(None),
+    bmr_kcal: float | None = Form(None),
+    waist_hip_ratio: float | None = Form(None),
+    obesity_degree_pct: float | None = Form(None),
+    inbody_score: float | None = Form(None),
+    ideal_weight_kg: float | None = Form(None),
+    weight_control_kg: float | None = Form(None),
+    fat_control_kg: float | None = Form(None),
+    muscle_control_kg: float | None = Form(None),
+    file: UploadFile | None = File(None),
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+):
+    attachment_url: str | None = None
+    attachment_type: str | None = None
+    if file is not None and file.filename:
+        attachment_url, attachment_type = await save_upload(
+            file, subfolder=f"body_compositions/{patient_id}"
+        )
+
+    metrics = {
+        key: value
+        for key, value in {
+            "weight_kg": weight_kg,
+            "body_fat_pct": body_fat_pct,
+            "skeletal_muscle_kg": skeletal_muscle_kg,
+            "body_fat_mass_kg": body_fat_mass_kg,
+            "total_body_water_l": total_body_water_l,
+            "protein_kg": protein_kg,
+            "minerals_kg": minerals_kg,
+            "bmi": bmi,
+            "visceral_fat_level": visceral_fat_level,
+            "bmr_kcal": bmr_kcal,
+            "waist_hip_ratio": waist_hip_ratio,
+            "obesity_degree_pct": obesity_degree_pct,
+            "inbody_score": inbody_score,
+            "ideal_weight_kg": ideal_weight_kg,
+            "weight_control_kg": weight_control_kg,
+            "fat_control_kg": fat_control_kg,
+            "muscle_control_kg": muscle_control_kg,
+        }.items()
+        if value is not None
+    }
+
+    payload = {
+        "at": at,
+        "provider": provider,
+        "metrics": metrics,
+        "attachment_url": attachment_url,
+        "attachment_type": attachment_type,
+    }
+    try:
+        return await service.add_body_composition(_owner_id(current), patient_id, payload)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

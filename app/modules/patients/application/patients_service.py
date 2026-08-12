@@ -42,3 +42,9 @@ class PatientsService:
         deleted = await self._repository.delete_for_owner(owner_id, patient_id)
         if not deleted:
             raise LookupError("Patient not found")
+
+    async def add_body_composition(self, owner_id: str, patient_id: str, payload: dict) -> dict:
+        created = await self._repository.add_body_composition(owner_id, patient_id, payload)
+        if created is None:
+            raise LookupError("Patient not found")
+        return created

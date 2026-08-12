@@ -218,11 +218,30 @@ class MongoMeRepository:
                 "id": str(doc["_id"]),
                 "title": doc.get("title"),
                 "description": doc.get("description"),
-                "recipes": doc.get("recipes", []),
+                "recipes": self._serialize_recipes(doc.get("recipes", [])),
                 "updated_at": doc.get("updated_at"),
             }
             async for doc in cursor
         ]
+
+    async def get_recipe_for_owner(self, owner_id: str | None, recipe_id: str) -> dict | None:
+        if not owner_id:
+            return None
+        cursor = self._db.recipe_collections.find({"owner_id": self._as_oid(owner_id)})
+        async for doc in cursor:
+            for recipe in self._serialize_recipes(doc.get("recipes", [])):
+                if recipe["id"] == recipe_id:
+                    return recipe
+        return None
+
+    def _serialize_recipes(self, recipes: list[dict]) -> list[dict]:
+        serialized = []
+        for recipe in recipes:
+            item = dict(recipe)
+            item["id"] = str(item.get("id") or item.get("_id") or "")
+            item.pop("_id", None)
+            serialized.append(item)
+        return serialized
 
     async def list_education_videos(self, owner_id: str | None) -> list[dict]:
         if not owner_id:
@@ -264,6 +283,7 @@ class MongoMeRepository:
                 "provider": doc.get("provider"),
                 "metrics": doc.get("metrics", {}),
                 "attachment_url": doc.get("attachment_url"),
+                "attachment_type": doc.get("attachment_type"),
             }
             async for doc in cursor
         ]

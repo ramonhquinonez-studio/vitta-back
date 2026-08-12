@@ -25,3 +25,6 @@ class PatientsRepository(Protocol):
 
     async def delete_for_owner(self, owner_id: str, patient_id: str) -> bool:
         ...
+
+    async def add_body_composition(self, owner_id: str, patient_id: str, payload: dict) -> dict | None:
+        ...

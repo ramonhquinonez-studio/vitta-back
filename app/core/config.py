@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     MONGO_URI: str = "mongodb://localhost:27017"
     MONGO_DB: str = "nutriapp"
 
+    UPLOADS_DIR: str = "uploads"
+
     # Placeholders seguros para desarrollo local. En prod deben venir por entorno.
     JWT_SECRET: str = "local-dev-change-me"
     JWT_REFRESH_SECRET: str = "local-dev-refresh-change-me"

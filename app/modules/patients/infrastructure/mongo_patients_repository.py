@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 from bson import ObjectId
@@ -71,6 +72,34 @@ class MongoPatientsRepository:
             {"_id": patient_oid, "owner_id": owner_oid},
         )
         return result.deleted_count > 0
+
+    async def add_body_composition(self, owner_id: str, patient_id: str, payload: dict) -> dict | None:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        patient_oid = self._as_oid(patient_id)
+        owned = await self._db.patients.find_one({"_id": patient_oid, "owner_id": owner_oid})
+        if owned is None:
+            return None
+
+        document = {
+            "owner_id": owner_oid,
+            "patient_id": patient_oid,
+            "at": payload.get("at") or datetime.utcnow(),
+            "provider": payload.get("provider"),
+            "metrics": payload.get("metrics", {}),
+            "attachment_url": payload.get("attachment_url"),
+            "attachment_type": payload.get("attachment_type"),
+            "created_at": datetime.utcnow(),
+        }
+        result = await self._db.body_compositions.insert_one(document)
+        document["_id"] = result.inserted_id
+        return {
+            "id": str(document["_id"]),
+            "at": document["at"],
+            "provider": document["provider"],
+            "metrics": document["metrics"],
+            "attachment_url": document["attachment_url"],
+            "attachment_type": document["attachment_type"],
+        }
 
     def _to_entity(self, document: dict) -> Patient:
         return Patient(

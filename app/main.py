@@ -6,6 +6,7 @@ from app.core.notify import init_firebase
 from app.jobs.appointment_reminders import run_reminders
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings                 # <--- aquí
 from app.db.mongo import connect_to_mongo, close_mongo_connection
@@ -67,6 +68,9 @@ app.include_router(plans_router.router, tags=["plans"])
 app.include_router(devices_router.router)
 app.include_router(google_router.router)
 app.include_router(me_router.router, tags=["me"])
+
+os.makedirs(settings.UPLOADS_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.UPLOADS_DIR), name="uploads")
 
 @app.get("/")
 async def root():

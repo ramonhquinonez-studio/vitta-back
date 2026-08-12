@@ -235,6 +235,21 @@ class MeService:
         body_compositions = await self._repository.list_body_compositions(patient["id"])
         return {"notes": notes, "body_compositions": body_compositions}
 
+    async def list_body_compositions(self, user_id: str) -> list[dict]:
+        patient = await self._repository.get_patient_for_user(user_id)
+        if not patient:
+            return []
+        return await self._repository.list_body_compositions(patient["id"])
+
+    async def get_recipe(self, user_id: str, recipe_id: str) -> dict:
+        patient = await self._repository.get_patient_for_user(user_id)
+        if not patient:
+            raise LookupError("Recipe not found")
+        recipe = await self._repository.get_recipe_for_owner(patient.get("owner_id"), recipe_id)
+        if recipe is None:
+            raise LookupError("Recipe not found")
+        return recipe
+
     async def _require_patient(self, user_id: str) -> dict:
         patient = await self._repository.get_patient_for_user(user_id)
         if not patient:

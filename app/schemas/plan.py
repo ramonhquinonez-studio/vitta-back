@@ -6,9 +6,11 @@ class PlanMealItem(BaseModel):
     name: str
     qty: float
     unit: str
+    recipe_id: Optional[str] = None
 
 class PlanMeal(BaseModel):
     title: str
+    time: Optional[str] = None
     items: List[PlanMealItem] = Field(default_factory=list)
 
 class PlanCreate(BaseModel):

@@ -191,6 +191,31 @@ async def my_recipe_collections(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get("/recipes/{recipe_id}", response_model=dict)
+async def my_recipe_detail(
+    recipe_id: str,
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    try:
+        return await service.get_recipe(_user_id(current), recipe_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/body_compositions", response_model=list[dict])
+async def my_body_compositions(
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    try:
+        return await service.list_body_compositions(_user_id(current))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/education_videos", response_model=list[dict])
 async def my_education_videos(
     current=Depends(get_current_user),

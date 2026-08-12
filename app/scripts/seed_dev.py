@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from datetime import datetime, timedelta
 import random
 from bson import ObjectId
@@ -42,7 +43,7 @@ async def ensure_patient_for_user(user_id: ObjectId, owner_id: ObjectId) -> Obje
     return res.inserted_id
 
 
-async def ensure_plan(owner_id: ObjectId) -> ObjectId:
+async def ensure_plan(owner_id: ObjectId, recipe_ids: dict[str, str]) -> ObjectId:
     db = get_db()
     p = await db.plans.find_one({"owner_id": owner_id, "name": "Plan Semanal Demo"})
     if p:
@@ -56,16 +57,38 @@ async def ensure_plan(owner_id: ObjectId) -> ObjectId:
         "meals": [
             {
                 "title": "Desayuno",
+                "time": "08:00",
                 "items": [
-                    {"name": "Avenaa", "qty": 60, "unit": "g"},
-                    {"name": "Plátano", "qty": 1, "unit": "pz"},
+                    {
+                        "name": "Avena",
+                        "qty": 60,
+                        "unit": "g",
+                        "recipe_id": recipe_ids.get("Avena con plátano"),
+                    },
+                    {
+                        "name": "Plátano",
+                        "qty": 1,
+                        "unit": "pz",
+                        "recipe_id": recipe_ids.get("Avena con plátano"),
+                    },
                 ],
             },
             {
                 "title": "Comida",
+                "time": "13:30",
                 "items": [
-                    {"name": "Pechuga de pollo", "qty": 150, "unit": "g"},
-                    {"name": "Arroz", "qty": 80, "unit": "g"},
+                    {
+                        "name": "Pechuga de pollo",
+                        "qty": 150,
+                        "unit": "g",
+                        "recipe_id": recipe_ids.get("Pollo con arroz al horno"),
+                    },
+                    {
+                        "name": "Arroz",
+                        "qty": 80,
+                        "unit": "g",
+                        "recipe_id": recipe_ids.get("Pollo con arroz al horno"),
+                    },
                 ],
             },
         ],
@@ -159,37 +182,90 @@ async def seed_prescriptions(owner_id: ObjectId, patient_id: ObjectId) -> None:
     })
 
 
-async def seed_recipe_collections(owner_id: ObjectId) -> None:
+async def seed_recipe_collections(owner_id: ObjectId) -> dict[str, str]:
     db = get_db()
     now = datetime.utcnow()
-    exists = await db.recipe_collections.find_one({"owner_id": owner_id})
-    if exists:
-        return
+    existing = await db.recipe_collections.find_one({"owner_id": owner_id})
+    if existing:
+        return {
+            recipe.get("title"): recipe.get("id")
+            for recipe in existing.get("recipes", [])
+        }
+
+    recipes = [
+        {
+            "id": uuid.uuid4().hex,
+            "title": "Avena con plátano",
+            "meal_type": "Desayuno",
+            "minutes": 10,
+            "portions": 1,
+            "kcal": 320,
+            "ingredients": [
+                {"name": "Avena", "qty": 60, "unit": "g"},
+                {"name": "Plátano", "qty": 1, "unit": "pz"},
+                {"name": "Leche o agua", "qty": 200, "unit": "ml"},
+            ],
+            "steps": [
+                "Hervir la leche o el agua.",
+                "Agregar la avena y cocinar 3-5 minutos.",
+                "Servir con el plátano rebanado.",
+            ],
+        },
+        {
+            "id": uuid.uuid4().hex,
+            "title": "Pollo con arroz al horno",
+            "meal_type": "Comida",
+            "minutes": 35,
+            "portions": 2,
+            "kcal": 480,
+            "ingredients": [
+                {"name": "Pechuga de pollo", "qty": 150, "unit": "g"},
+                {"name": "Arroz", "qty": 80, "unit": "g"},
+                {"name": "Caldo de verduras", "qty": 200, "unit": "ml"},
+            ],
+            "steps": [
+                "Sellar la pechuga de pollo en un sartén.",
+                "Colocar el pollo y el arroz en un refractario con el caldo.",
+                "Hornear a 200°C durante 25 minutos.",
+            ],
+        },
+        {
+            "id": uuid.uuid4().hex,
+            "title": "Ensalada de quinua",
+            "meal_type": "Comida",
+            "minutes": 20,
+            "portions": 2,
+            "kcal": 410,
+            "ingredients": [
+                {"name": "Quinua", "qty": 80, "unit": "g"},
+                {"name": "Tomate", "qty": 1, "unit": "pz"},
+                {"name": "Aguacate", "qty": 0.5, "unit": "pz"},
+            ],
+            "steps": ["Cocer la quinua", "Picar vegetales", "Mezclar y servir"],
+        },
+        {
+            "id": uuid.uuid4().hex,
+            "title": "Wrap de pollo",
+            "meal_type": "Cena",
+            "minutes": 15,
+            "portions": 1,
+            "kcal": 390,
+            "ingredients": [
+                {"name": "Tortilla integral", "qty": 1, "unit": "pz"},
+                {"name": "Pechuga de pollo", "qty": 120, "unit": "g"},
+            ],
+            "steps": ["Cocinar pollo", "Armar wrap"],
+        },
+    ]
+
     await db.recipe_collections.insert_one({
         "owner_id": owner_id,
         "title": "Recetario Ligero",
         "description": "Platillos sencillos y balanceados.",
-        "recipes": [
-            {
-                "title": "Ensalada de quinua",
-                "ingredients": [
-                    {"name": "Quinua", "qty": 80, "unit": "g"},
-                    {"name": "Tomate", "qty": 1, "unit": "pz"},
-                    {"name": "Aguacate", "qty": 0.5, "unit": "pz"},
-                ],
-                "steps": ["Cocer la quinua", "Picar vegetales", "Mezclar y servir"],
-            },
-            {
-                "title": "Wrap de pollo",
-                "ingredients": [
-                    {"name": "Tortilla integral", "qty": 1, "unit": "pz"},
-                    {"name": "Pechuga de pollo", "qty": 120, "unit": "g"},
-                ],
-                "steps": ["Cocinar pollo", "Armar wrap"],
-            },
-        ],
+        "recipes": recipes,
         "updated_at": now,
     })
+    return {recipe["title"]: recipe["id"] for recipe in recipes}
 
 
 async def seed_education_videos(owner_id: ObjectId) -> None:
@@ -242,21 +318,110 @@ async def seed_clinical_history(owner_id: ObjectId, patient_id: ObjectId) -> Non
             },
         ])
 
-    comp_exists = await db.body_compositions.find_one({"patient_id": patient_id})
-    if not comp_exists:
-        await db.body_compositions.insert_one({
+async def seed_body_compositions(owner_id: ObjectId, patient_id: ObjectId) -> None:
+    db = get_db()
+    now = datetime.utcnow()
+    exists = await db.body_compositions.find_one({"patient_id": patient_id})
+    if exists:
+        return
+
+    # Historial de 4 escaneos InBody, del más antiguo al más reciente.
+    scans = [
+        {
+            "days_ago": 60,
+            "weight_kg": 78.4,
+            "body_fat_pct": 27.1,
+            "skeletal_muscle_kg": 32.8,
+            "body_fat_mass_kg": 21.2,
+            "total_body_water_l": 42.9,
+            "protein_kg": 11.6,
+            "minerals_kg": 3.9,
+            "bmi": 25.6,
+            "visceral_fat_level": 11,
+            "bmr_kcal": 1610,
+            "waist_hip_ratio": 0.97,
+            "obesity_degree_pct": 116,
+            "inbody_score": 74,
+            "ideal_weight_kg": 71.7,
+            "weight_control_kg": -6.7,
+            "fat_control_kg": -6.7,
+            "muscle_control_kg": 0.0,
+        },
+        {
+            "days_ago": 40,
+            "weight_kg": 76.9,
+            "body_fat_pct": 25.8,
+            "skeletal_muscle_kg": 33.4,
+            "body_fat_mass_kg": 19.8,
+            "total_body_water_l": 43.6,
+            "protein_kg": 11.9,
+            "minerals_kg": 4.0,
+            "bmi": 25.1,
+            "visceral_fat_level": 10,
+            "bmr_kcal": 1635,
+            "waist_hip_ratio": 0.96,
+            "obesity_degree_pct": 114,
+            "inbody_score": 77,
+            "ideal_weight_kg": 71.7,
+            "weight_control_kg": -5.2,
+            "fat_control_kg": -5.2,
+            "muscle_control_kg": 0.0,
+        },
+        {
+            "days_ago": 20,
+            "weight_kg": 74.9,
+            "body_fat_pct": 24.0,
+            "skeletal_muscle_kg": 34.2,
+            "body_fat_mass_kg": 18.0,
+            "total_body_water_l": 44.3,
+            "protein_kg": 12.1,
+            "minerals_kg": 4.05,
+            "bmi": 24.4,
+            "visceral_fat_level": 8,
+            "bmr_kcal": 1660,
+            "waist_hip_ratio": 0.95,
+            "obesity_degree_pct": 111,
+            "inbody_score": 80,
+            "ideal_weight_kg": 71.7,
+            "weight_control_kg": -3.2,
+            "fat_control_kg": -3.2,
+            "muscle_control_kg": 0.0,
+        },
+        {
+            "days_ago": 0,
+            "weight_kg": 73.2,
+            "body_fat_pct": 16.8,
+            "skeletal_muscle_kg": 35.1,
+            "body_fat_mass_kg": 12.3,
+            "total_body_water_l": 44.6,
+            "protein_kg": 12.3,
+            "minerals_kg": 4.10,
+            "bmi": 23.9,
+            "visceral_fat_level": 5,
+            "bmr_kcal": 1686,
+            "waist_hip_ratio": 0.95,
+            "obesity_degree_pct": 109,
+            "inbody_score": 82,
+            "ideal_weight_kg": 71.7,
+            "weight_control_kg": -1.5,
+            "fat_control_kg": -1.5,
+            "muscle_control_kg": 0.0,
+        },
+    ]
+
+    documents = []
+    for scan in scans:
+        days_ago = scan.pop("days_ago")
+        documents.append({
             "owner_id": owner_id,
             "patient_id": patient_id,
-            "at": now - timedelta(days=10),
+            "at": now - timedelta(days=days_ago),
             "provider": "InBody",
-            "metrics": {
-                "weight_kg": 78.4,
-                "body_fat_pct": 27.1,
-                "skeletal_muscle_kg": 33.5,
-                "visceral_fat_level": 9,
-            },
+            "metrics": scan,
             "attachment_url": None,
+            "attachment_type": None,
         })
+    await db.body_compositions.insert_many(documents)
 
 
 async def main():
@@ -275,19 +440,23 @@ async def main():
         # Paciente ligado a user y owner (pro)
         patient_id = await ensure_patient_for_user(patient_user_id, pro_id)
 
+        # Recetario primero, para poder ligar cada comida del plan a su receta
+        recipe_ids = await seed_recipe_collections(pro_id)
+
         # Plan básico del owner y asignación al paciente
-        plan_id = await ensure_plan(pro_id)
+        plan_id = await ensure_plan(pro_id, recipe_ids)
         await ensure_assignment(pro_id, patient_id, plan_id)
 
         # Citas de ejemplo
         await seed_appointments(pro_id, patient_id)
         # Mediciones de ejemplo para el dashboard de progreso
         await seed_measurements(pro_id, patient_id)
-        # Prescripción, recetarios, videos, e historial clínico de ejemplo
+        # Prescripción, videos, e historial clínico de ejemplo
         await seed_prescriptions(pro_id, patient_id)
-        await seed_recipe_collections(pro_id)
         await seed_education_videos(pro_id)
         await seed_clinical_history(pro_id, patient_id)
+        # Historial de escaneos InBody
+        await seed_body_compositions(pro_id, patient_id)
 
         print("=== Seed listo ===")
         print(f"PRO:    {pro_email} / {pro_pwd}")

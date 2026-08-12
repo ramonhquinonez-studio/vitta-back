@@ -44,6 +44,12 @@ async def ensure_indexes() -> None:
     # ---------- MEASUREMENTS (for progress) ----------
     await db.measurements.create_index([("patient_id", 1), ("at", 1)])
 
+    # ---------- BODY COMPOSITIONS (InBody scans) ----------
+    await db.body_compositions.create_index([("patient_id", 1), ("at", -1)])
+
+    # ---------- RECIPE COLLECTIONS ----------
+    await db.recipe_collections.create_index("owner_id")
+
 
     # ---------- NOTIFICATIONS----------
 
