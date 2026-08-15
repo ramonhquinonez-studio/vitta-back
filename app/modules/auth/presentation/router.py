@@ -2,8 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 
+from app.core.config import settings
 from app.db.mongo import get_db
-from app.schemas.auth import LoginIn, RefreshIn, RegisterIn, TokensOut
+from app.schemas.auth import (
+    ForgotPasswordIn,
+    ForgotPasswordOut,
+    LoginIn,
+    RefreshIn,
+    RegisterIn,
+    ResetPasswordIn,
+    TokensOut,
+)
 
 from ..application.auth_service import AuthService
 from ..infrastructure.mongo_auth_repository import MongoAuthRepository
@@ -33,9 +42,12 @@ async def register(
             name=payload.name,
             email=payload.email,
             password=payload.password,
+            invite_code=payload.invite_code,
         )
     except FileExistsError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -57,6 +69,34 @@ async def login(
         refresh_token=tokens.refresh_token,
         token_type=tokens.token_type,
     )
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordOut)
+async def forgot_password(
+    payload: ForgotPasswordIn,
+    service: AuthService = Depends(get_auth_service),
+):
+    # Siempre responde igual exista o no el correo, para no filtrar qué
+    # cuentas están registradas.
+    token = await service.forgot_password(email=payload.email)
+    message = "Si el correo existe, se enviaron instrucciones para restablecer la contraseña."
+
+    # No hay integración de envío de correo todavía: fuera de local/dev el
+    # token nunca viaja en la respuesta.
+    exposed_token = token if settings.APP_ENV.lower() not in ("prod", "production", "staging") else None
+    return ForgotPasswordOut(message=message, reset_token=exposed_token)
+
+
+@router.post("/reset-password", response_model=dict)
+async def reset_password(
+    payload: ResetPasswordIn,
+    service: AuthService = Depends(get_auth_service),
+):
+    try:
+        await service.reset_password(token=payload.token, new_password=payload.new_password)
+    except PermissionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
 
 
 @router.post("/refresh", response_model=TokensOut)

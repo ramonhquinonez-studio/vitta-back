@@ -10,6 +10,11 @@
 - `006-back-me-module-foundation`
 - `007-back-plans-module-foundation`
 - `008-back-test-foundation`
+- `009-back-auth-registration-and-recovery`
+- `010-back-me-profile-update`
+- `011-back-grip-strength-metric`
+- `012-back-plan-attachment`
+- `013-back-plan-days-passthrough`
 
 ## Next Recommended Specs
 

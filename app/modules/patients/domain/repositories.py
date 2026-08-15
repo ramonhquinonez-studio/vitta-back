@@ -28,3 +28,6 @@ class PatientsRepository(Protocol):
 
     async def add_body_composition(self, owner_id: str, patient_id: str, payload: dict) -> dict | None:
         ...
+
+    async def create_invite_code(self, owner_id: str) -> dict:
+        ...

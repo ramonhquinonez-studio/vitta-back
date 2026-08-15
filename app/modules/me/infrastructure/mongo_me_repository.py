@@ -35,6 +35,27 @@ class MongoMeRepository:
             "owner_id": str(patient.get("owner_id")) if patient.get("owner_id") else None,
         }
 
+    async def update_patient_profile(self, patient_id: str, payload: dict) -> dict | None:
+        patient_oid = self._as_oid(patient_id)
+        result = await self._db.patients.update_one(
+            {"_id": patient_oid},
+            {"$set": payload},
+        )
+        if result.matched_count == 0:
+            return None
+        updated = await self._db.patients.find_one({"_id": patient_oid})
+        if updated is None:
+            return None
+        return {
+            "id": str(updated["_id"]),
+            "name": updated.get("name"),
+            "age": updated.get("age"),
+            "sex": updated.get("sex"),
+            "height_cm": updated.get("height_cm"),
+            "allergies": updated.get("allergies"),
+            "owner_id": str(updated.get("owner_id")) if updated.get("owner_id") else None,
+        }
+
     async def list_appointments(
         self,
         patient_id: str,
@@ -75,7 +96,10 @@ class MongoMeRepository:
             "goal": plan.get("goal", "custom"),
             "duration_days": plan.get("duration_days", 7),
             "meals": plan.get("meals", []),
+            "days": plan.get("days", []),
             "updated_at": plan.get("updated_at"),
+            "attachment_url": plan.get("attachment_url"),
+            "attachment_type": plan.get("attachment_type"),
         }
 
     async def find_owner_overlap(

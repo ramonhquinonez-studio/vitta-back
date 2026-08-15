@@ -37,6 +37,17 @@ class MeService:
             "patient": patient,
         }
 
+    async def update_profile(self, user_id: str, payload: dict[str, Any]) -> dict:
+        if not payload:
+            raise ValueError("No fields to update")
+        patient = await self._repository.get_patient_for_user(user_id)
+        if not patient:
+            raise LookupError("Patient not found")
+        updated = await self._repository.update_patient_profile(patient["id"], payload)
+        if updated is None:
+            raise LookupError("Patient not found")
+        return updated
+
     async def list_appointments(
         self,
         user_id: str,

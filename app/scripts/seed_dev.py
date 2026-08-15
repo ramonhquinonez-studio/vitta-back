@@ -115,6 +115,22 @@ async def ensure_assignment(owner_id: ObjectId, patient_id: ObjectId, plan_id: O
     })
 
 
+async def ensure_demo_invite_code(owner_id: ObjectId) -> None:
+    db = get_db()
+    code = "DEMO2026"
+    existing = await db.invite_codes.find_one({"code": code})
+    if existing:
+        return
+    await db.invite_codes.insert_one({
+        "code": code,
+        "owner_id": owner_id,
+        "created_at": datetime.utcnow(),
+        "expires_at": datetime.utcnow() + timedelta(days=365),
+        "used_at": None,
+        "used_by_user_id": None,
+    })
+
+
 async def seed_appointments(owner_id: ObjectId, patient_id: ObjectId) -> None:
     db = get_db()
     now = datetime.utcnow()
@@ -346,6 +362,8 @@ async def seed_body_compositions(owner_id: ObjectId, patient_id: ObjectId) -> No
             "weight_control_kg": -6.7,
             "fat_control_kg": -6.7,
             "muscle_control_kg": 0.0,
+            "grip_strength_left_kg": 28.5,
+            "grip_strength_right_kg": 30.0,
         },
         {
             "days_ago": 40,
@@ -366,6 +384,8 @@ async def seed_body_compositions(owner_id: ObjectId, patient_id: ObjectId) -> No
             "weight_control_kg": -5.2,
             "fat_control_kg": -5.2,
             "muscle_control_kg": 0.0,
+            "grip_strength_left_kg": 29.5,
+            "grip_strength_right_kg": 31.0,
         },
         {
             "days_ago": 20,
@@ -386,6 +406,8 @@ async def seed_body_compositions(owner_id: ObjectId, patient_id: ObjectId) -> No
             "weight_control_kg": -3.2,
             "fat_control_kg": -3.2,
             "muscle_control_kg": 0.0,
+            "grip_strength_left_kg": 31.0,
+            "grip_strength_right_kg": 32.5,
         },
         {
             "days_ago": 0,
@@ -406,6 +428,8 @@ async def seed_body_compositions(owner_id: ObjectId, patient_id: ObjectId) -> No
             "weight_control_kg": -1.5,
             "fat_control_kg": -1.5,
             "muscle_control_kg": 0.0,
+            "grip_strength_left_kg": 32.5,
+            "grip_strength_right_kg": 34.0,
         },
     ]
 
@@ -457,10 +481,13 @@ async def main():
         await seed_clinical_history(pro_id, patient_id)
         # Historial de escaneos InBody
         await seed_body_compositions(pro_id, patient_id)
+        # Código de invitación demo para probar el registro de pacientes
+        await ensure_demo_invite_code(pro_id)
 
         print("=== Seed listo ===")
         print(f"PRO:    {pro_email} / {pro_pwd}")
         print(f"PATIENT:{patient_email} / {patient_pwd}")
+        print("INVITE: DEMO2026 (para probar /auth/register)")
     finally:
         await close_mongo_connection()
 

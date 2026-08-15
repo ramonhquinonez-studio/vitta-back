@@ -4,3 +4,6 @@ __pycache__/
 .venv/
 .env
 firebase-service-account.json
+.DS_Store
+*.log
+uploads/

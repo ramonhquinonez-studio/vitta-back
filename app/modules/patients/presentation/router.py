@@ -6,6 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.core.deps import get_current_user
 from app.core.storage import save_upload
 from app.db.mongo import get_db
+from app.schemas.auth import InviteCodeOut
 from app.schemas.pagination import Page, PaginationParams
 from app.schemas.patients import PatientIn, PatientOut, PatientUpdate
 
@@ -72,6 +73,14 @@ async def create_patient(
 ):
     patient = await service.create_patient(_owner_id(current), payload.model_dump())
     return _serialize(patient)
+
+
+@router.post("/invite-codes", response_model=InviteCodeOut, status_code=201)
+async def create_invite_code(
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+):
+    return await service.create_invite_code(_owner_id(current))
 
 
 @router.get("/{patient_id}", response_model=PatientOut)
@@ -147,6 +156,8 @@ async def add_patient_body_composition(
     weight_control_kg: float | None = Form(None),
     fat_control_kg: float | None = Form(None),
     muscle_control_kg: float | None = Form(None),
+    grip_strength_left_kg: float | None = Form(None),
+    grip_strength_right_kg: float | None = Form(None),
     file: UploadFile | None = File(None),
     current=Depends(get_current_user),
     service: PatientsService = Depends(get_patients_service),
@@ -178,6 +189,8 @@ async def add_patient_body_composition(
             "weight_control_kg": weight_control_kg,
             "fat_control_kg": fat_control_kg,
             "muscle_control_kg": muscle_control_kg,
+            "grip_strength_left_kg": grip_strength_left_kg,
+            "grip_strength_right_kg": grip_strength_right_kg,
         }.items()
         if value is not None
     }

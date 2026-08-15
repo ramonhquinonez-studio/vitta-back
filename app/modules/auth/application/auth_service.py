@@ -1,10 +1,15 @@
+from datetime import datetime
+
 from jose import JWTError
 
 from app.core.security import (
     create_access_token,
+    create_password_reset_token,
     create_refresh_token,
+    decode_password_reset_token,
     decode_refresh,
     hash_password,
+    password_reset_guard_matches,
     verify_password,
 )
 
@@ -16,7 +21,9 @@ class AuthService:
     def __init__(self, repository: AuthRepository):
         self._repository = repository
 
-    async def register(self, *, name: str, email: str, password: str) -> AuthUser:
+    async def register(
+        self, *, name: str, email: str, password: str, invite_code: str
+    ) -> AuthUser:
         normalized_email = self._normalize_email(email)
         normalized_name = (name or "").strip()
         if not normalized_name:
@@ -26,12 +33,56 @@ class AuthService:
         if existing is not None:
             raise FileExistsError("Email already registered")
 
-        return await self._repository.create_user(
+        invite = await self._repository.get_invite_code((invite_code or "").strip().upper())
+        if invite is None:
+            raise LookupError("Invalid invite code")
+        if invite.get("used_at") is not None:
+            raise LookupError("Invite code already used")
+        expires_at = invite.get("expires_at")
+        if expires_at is not None and expires_at < datetime.utcnow():
+            raise LookupError("Invite code expired")
+
+        user = await self._repository.create_user(
             name=normalized_name,
             email=normalized_email,
             password_hash=hash_password(password),
-            role="user",
+            role="patient",
         )
+        await self._repository.create_patient_for_user(
+            user_id=user.id,
+            owner_id=invite["owner_id"],
+            name=normalized_name,
+        )
+        await self._repository.consume_invite_code(invite["code"], user.id)
+        return user
+
+    async def forgot_password(self, *, email: str) -> str | None:
+        """Devuelve el token de reset si el correo existe; None si no (el
+        router siempre responde con el mismo mensaje genérico para no
+        revelar qué correos están registrados)."""
+        normalized_email = self._normalize_email(email)
+        user = await self._repository.get_user_by_email(normalized_email)
+        if user is None:
+            return None
+        return create_password_reset_token(user.id, user.password_hash or "")
+
+    async def reset_password(self, *, token: str, new_password: str) -> None:
+        try:
+            payload = decode_password_reset_token(token)
+        except JWTError as exc:
+            raise PermissionError("Invalid or expired token") from exc
+
+        user_id = payload.get("sub")
+        if not user_id:
+            raise PermissionError("Invalid token payload")
+
+        user = await self._repository.get_user_by_id(user_id)
+        if user is None:
+            raise PermissionError("Invalid token")
+        if not password_reset_guard_matches(payload, user.password_hash or ""):
+            raise PermissionError("Token already used")
+
+        await self._repository.update_password_hash(user_id, hash_password(new_password))
 
     async def login(self, *, email: str, password: str) -> AuthTokens:
         normalized_email = self._normalize_email(email)

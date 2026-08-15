@@ -21,6 +21,8 @@ class BodyCompositionMetrics(BaseModel):
     weight_control_kg: float | None = None
     fat_control_kg: float | None = None
     muscle_control_kg: float | None = None
+    grip_strength_left_kg: float | None = None
+    grip_strength_right_kg: float | None = None
 
 
 class BodyCompositionOut(BaseModel):

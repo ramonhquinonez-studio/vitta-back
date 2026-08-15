@@ -47,6 +47,54 @@ class MongoAuthRepository:
             raise RuntimeError("User creation failed")
         return self._to_entity(created)
 
+    async def get_invite_code(self, code: str) -> dict | None:
+        doc = await self._db.invite_codes.find_one({"code": code})
+        if doc is None:
+            return None
+        return {
+            "code": doc["code"],
+            "owner_id": str(doc["owner_id"]),
+            "expires_at": doc.get("expires_at"),
+            "used_at": doc.get("used_at"),
+        }
+
+    async def consume_invite_code(self, code: str, user_id: str) -> None:
+        await self._db.invite_codes.update_one(
+            {"code": code},
+            {
+                "$set": {
+                    "used_at": datetime.utcnow(),
+                    "used_by_user_id": ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id,
+                }
+            },
+        )
+
+    async def create_patient_for_user(
+        self,
+        *,
+        user_id: str,
+        owner_id: str,
+        name: str,
+    ) -> None:
+        await self._db.patients.insert_one(
+            {
+                "user_id": ObjectId(user_id),
+                "owner_id": ObjectId(owner_id),
+                "name": name,
+                "age": None,
+                "sex": None,
+                "height_cm": None,
+                "allergies": [],
+                "created_at": datetime.utcnow(),
+            }
+        )
+
+    async def update_password_hash(self, user_id: str, password_hash: str) -> None:
+        await self._db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"password_hash": password_hash, "updated_at": datetime.utcnow()}},
+        )
+
     def _to_entity(self, doc: dict) -> AuthUser:
         return AuthUser(
             id=str(doc["_id"]),

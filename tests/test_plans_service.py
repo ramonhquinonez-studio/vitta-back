@@ -50,6 +50,18 @@ class _FakePlansRepository:
     async def assign_plan(self, owner_id, plan_id, patient_id):
         return None
 
+    async def set_attachment_for_owner(
+        self, owner_id, plan_id, attachment_url, attachment_type
+    ):
+        if plan_id != "plan-1":
+            return None
+        self.plan = {
+            **self.plan,
+            "attachment_url": attachment_url,
+            "attachment_type": attachment_type,
+        }
+        return self.plan
+
 
 class PlansServiceTest(unittest.IsolatedAsyncioTestCase):
     async def test_grocery_list_aggregates_items_by_duration(self):
@@ -70,3 +82,21 @@ class PlansServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(ValueError):
             await service.assign_plan("owner-1", "plan-1", None)
+
+    async def test_set_attachment_updates_plan(self):
+        service = PlansService(_FakePlansRepository())
+
+        updated = await service.set_attachment(
+            "owner-1", "plan-1", "/uploads/plans/plan-1/x.pdf", "application/pdf"
+        )
+
+        self.assertEqual(updated["attachment_url"], "/uploads/plans/plan-1/x.pdf")
+        self.assertEqual(updated["attachment_type"], "application/pdf")
+
+    async def test_set_attachment_missing_plan_raises(self):
+        service = PlansService(_FakePlansRepository())
+
+        with self.assertRaises(LookupError):
+            await service.set_attachment(
+                "owner-1", "missing", "/uploads/x.pdf", "application/pdf"
+            )

@@ -62,3 +62,13 @@ class PlansService:
             raise LookupError("Patient not found")
         await self._repository.assign_plan(owner_id, plan_id, patient_id)
         return {"ok": True}
+
+    async def set_attachment(
+        self, owner_id: str, plan_id: str, attachment_url: str, attachment_type: str
+    ) -> dict:
+        updated = await self._repository.set_attachment_for_owner(
+            owner_id, plan_id, attachment_url, attachment_type
+        )
+        if updated is None:
+            raise LookupError("Plan not found")
+        return updated

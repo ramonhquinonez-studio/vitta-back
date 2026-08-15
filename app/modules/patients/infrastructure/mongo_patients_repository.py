@@ -1,10 +1,18 @@
-from datetime import datetime
+import secrets
+import string
+from datetime import datetime, timedelta
 from typing import Any
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.errors import DuplicateKeyError
 
 from ..domain.entities import Patient
+
+# Sin caracteres ambiguos (0/O, 1/I/l) para que sea fácil de transcribir a mano.
+_INVITE_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+_INVITE_CODE_LENGTH = 8
+_INVITE_CODE_EXPIRE_DAYS = 30
 
 
 class MongoPatientsRepository:
@@ -100,6 +108,30 @@ class MongoPatientsRepository:
             "attachment_url": document["attachment_url"],
             "attachment_type": document["attachment_type"],
         }
+
+    async def create_invite_code(self, owner_id: str) -> dict:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        expires_at = datetime.utcnow() + timedelta(days=_INVITE_CODE_EXPIRE_DAYS)
+
+        for _ in range(5):
+            code = "".join(
+                secrets.choice(_INVITE_CODE_ALPHABET) for _ in range(_INVITE_CODE_LENGTH)
+            )
+            try:
+                await self._db.invite_codes.insert_one(
+                    {
+                        "code": code,
+                        "owner_id": owner_oid,
+                        "created_at": datetime.utcnow(),
+                        "expires_at": expires_at,
+                        "used_at": None,
+                        "used_by_user_id": None,
+                    }
+                )
+                return {"code": code, "expires_at": expires_at}
+            except DuplicateKeyError:
+                continue
+        raise RuntimeError("Could not generate a unique invite code")
 
     def _to_entity(self, document: dict) -> Patient:
         return Patient(

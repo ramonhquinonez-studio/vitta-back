@@ -6,6 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.deps import get_current_user
 from app.db.mongo import get_db
+from app.schemas.patients import PatientUpdate
 
 from ..application.me_service import MeService
 from ..infrastructure.mongo_me_repository import MongoMeRepository
@@ -41,6 +42,25 @@ async def my_profile(
 ):
     try:
         return await service.get_profile(_user_id(current))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.patch("/profile", response_model=dict)
+async def update_my_profile(
+    payload: PatientUpdate,
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    updates = {
+        key: value
+        for key, value in payload.model_dump().items()
+        if value is not None
+    }
+    try:
+        return await service.update_profile(_user_id(current), updates)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

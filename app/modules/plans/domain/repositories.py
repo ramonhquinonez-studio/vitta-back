@@ -22,3 +22,8 @@ class PlansRepository(Protocol):
 
     async def assign_plan(self, owner_id: str, plan_id: str, patient_id: str) -> None:
         ...
+
+    async def set_attachment_for_owner(
+        self, owner_id: str, plan_id: str, attachment_url: str, attachment_type: str
+    ) -> dict | None:
+        ...

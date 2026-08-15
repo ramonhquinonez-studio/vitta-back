@@ -36,4 +36,6 @@ class PlanOut(BaseModel):
     meals: List[PlanMeal]
     created_at: datetime
     updated_at: datetime
+    attachment_url: Optional[str] = None
+    attachment_type: Optional[str] = None
     model_config = ConfigDict(populate_by_name=True)

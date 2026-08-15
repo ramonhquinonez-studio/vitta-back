@@ -9,6 +9,9 @@ class MeRepository(Protocol):
     async def get_patient_for_user(self, user_id: str) -> dict | None:
         ...
 
+    async def update_patient_profile(self, patient_id: str, payload: dict) -> dict | None:
+        ...
+
     async def list_appointments(
         self,
         patient_id: str,

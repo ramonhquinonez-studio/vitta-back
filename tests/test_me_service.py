@@ -20,6 +20,12 @@ class _FakeMeRepository:
     async def get_patient_for_user(self, user_id):
         return self.patient
 
+    async def update_patient_profile(self, patient_id, payload):
+        if patient_id != self.patient["id"]:
+            return None
+        self.patient.update(payload)
+        return self.patient
+
     async def list_appointments(self, patient_id, *, from_dt=None, to_dt=None):
         return []
 
@@ -104,3 +110,31 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["status"], "pending")
         self.assertEqual(repository.created_payload["end"], start + timedelta(minutes=45))
+
+    async def test_update_profile_applies_patch_to_linked_patient(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+
+        result = await service.update_profile(
+            "user-1",
+            {"age": 29, "sex": "female", "height_cm": 165.0, "allergies": ["lactosa"]},
+        )
+
+        self.assertEqual(result["age"], 29)
+        self.assertEqual(result["sex"], "female")
+        self.assertEqual(result["height_cm"], 165.0)
+        self.assertEqual(result["allergies"], ["lactosa"])
+
+    async def test_update_profile_rejects_empty_payload(self):
+        service = MeService(_FakeMeRepository())
+
+        with self.assertRaises(ValueError):
+            await service.update_profile("user-1", {})
+
+    async def test_update_profile_rejects_user_without_patient(self):
+        repository = _FakeMeRepository()
+        repository.patient = None
+        service = MeService(repository)
+
+        with self.assertRaises(LookupError):
+            await service.update_profile("user-1", {"age": 29})

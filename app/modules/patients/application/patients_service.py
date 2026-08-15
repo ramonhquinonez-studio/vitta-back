@@ -48,3 +48,6 @@ class PatientsService:
         if created is None:
             raise LookupError("Patient not found")
         return created
+
+    async def create_invite_code(self, owner_id: str) -> dict:
+        return await self._repository.create_invite_code(owner_id)

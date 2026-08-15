@@ -93,6 +93,15 @@ class MongoPlansRepository:
             }
         )
 
+    async def set_attachment_for_owner(
+        self, owner_id: str, plan_id: str, attachment_url: str, attachment_type: str
+    ) -> dict | None:
+        return await self.update_for_owner(
+            owner_id,
+            plan_id,
+            {"attachment_url": attachment_url, "attachment_type": attachment_type},
+        )
+
     def _serialize(self, doc: dict) -> dict:
         return {
             "id": str(doc["_id"]),
@@ -102,6 +111,8 @@ class MongoPlansRepository:
             "meals": doc.get("meals", []),
             "created_at": doc.get("created_at"),
             "updated_at": doc.get("updated_at"),
+            "attachment_url": doc.get("attachment_url"),
+            "attachment_type": doc.get("attachment_type"),
         }
 
     def _as_oid(self, id_str: str, field_name: str = "id") -> ObjectId:

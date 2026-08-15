@@ -19,3 +19,21 @@ class AuthRepository(Protocol):
         role: str,
     ) -> AuthUser:
         ...
+
+    async def get_invite_code(self, code: str) -> dict | None:
+        ...
+
+    async def consume_invite_code(self, code: str, user_id: str) -> None:
+        ...
+
+    async def create_patient_for_user(
+        self,
+        *,
+        user_id: str,
+        owner_id: str,
+        name: str,
+    ) -> None:
+        ...
+
+    async def update_password_hash(self, user_id: str, password_hash: str) -> None:
+        ...

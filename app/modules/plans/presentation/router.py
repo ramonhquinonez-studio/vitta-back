@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.deps import get_current_user
+from app.core.storage import save_upload
 from app.db.mongo import get_db
 from app.schemas.plan import PlanCreate, PlanOut, PlanUpdate
 
@@ -103,6 +104,26 @@ async def generate_grocery_list(
 ):
     try:
         return await service.grocery_list(_owner_id(current), plan_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/{plan_id}/attachment", response_model=PlanOut)
+async def upload_plan_attachment(
+    plan_id: str,
+    file: UploadFile = File(...),
+    current=Depends(get_current_user),
+    service: PlansService = Depends(get_plans_service),
+):
+    attachment_url, attachment_type = await save_upload(
+        file, subfolder=f"plans/{plan_id}"
+    )
+    try:
+        return await service.set_attachment(
+            _owner_id(current), plan_id, attachment_url, attachment_type
+        )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
