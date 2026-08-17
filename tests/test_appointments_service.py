@@ -1,3 +1,4 @@
+import json
 import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -162,6 +163,50 @@ class AppointmentsServiceTest(unittest.IsolatedAsyncioTestCase):
                 body_composition_id=None,
                 no_sync=False,
             )
+
+    async def test_conflict_detail_is_json_serializable(self):
+        # Regression test: HTTPException's `detail` is rendered by
+        # Starlette's plain json.dumps, not FastAPI's Pydantic machinery, so
+        # conflict_detail() must never return raw datetime objects — doing
+        # so previously turned a 409 overlap response into a 500 (confirmed
+        # live: PATCH-ing an appointment onto an occupied slot 500'd with
+        # "Object of type datetime is not JSON serializable").
+        repository = _FakeAppointmentsRepository()
+        calendar = _FakeCalendarGateway()
+        service = AppointmentsService(repository, calendar)
+
+        start = datetime.now(UTC)
+        await repository.create_for_owner(
+            "owner-1",
+            patient_id="patient-1",
+            start=start,
+            end=start + timedelta(minutes=30),
+            mode="online",
+            status="pending",
+            note=None,
+            plan_id=None,
+            body_composition_id=None,
+            no_sync=False,
+        )
+
+        try:
+            await service.create_appointment(
+                "owner-1",
+                patient_id="patient-2",
+                start=start + timedelta(minutes=10),
+                end=start + timedelta(minutes=40),
+                mode="online",
+                status="pending",
+                note=None,
+                plan_id=None,
+                body_composition_id=None,
+                no_sync=False,
+            )
+            self.fail("Expected OverlapError")
+        except OverlapError as exc:
+            detail = service.conflict_detail(exc)
+            json.dumps(detail)  # raises TypeError if any value isn't serializable
+            self.assertIsInstance(detail["conflict_start"], str)
 
     async def test_create_appointment_sets_google_event_id_when_sync_enabled(self):
         repository = _FakeAppointmentsRepository()

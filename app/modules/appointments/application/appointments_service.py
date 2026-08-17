@@ -202,10 +202,14 @@ class AppointmentsService:
             raise OverlapError(overlap)
 
     def conflict_detail(self, error: OverlapError) -> dict:
+        # HTTPException's `detail` is serialized by Starlette's plain
+        # json.dumps, not FastAPI's Pydantic response_model machinery — raw
+        # datetime objects here crash that encoder (500 instead of 409), so
+        # they must be pre-serialized to ISO 8601 strings.
         return {
             "code": "OVERLAP",
             "message": str(error),
             "conflict_id": error.conflict.id,
-            "conflict_start": error.conflict.start,
-            "conflict_end": error.conflict.end,
+            "conflict_start": error.conflict.start.isoformat(),
+            "conflict_end": error.conflict.end.isoformat() if error.conflict.end else None,
         }

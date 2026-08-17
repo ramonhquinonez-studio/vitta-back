@@ -17,6 +17,7 @@
 - `013-back-plan-days-passthrough`
 - `014-back-consultation-history-linkage`
 - `015-back-appointments-patient-filter`
+- `016-back-overlap-conflict-serialization-fix`
 
 ## Next Recommended Specs
 
