@@ -312,6 +312,34 @@ class MongoMeRepository:
             async for doc in cursor
         ]
 
+    async def get_body_composition_by_id(self, body_composition_id: str) -> dict | None:
+        if not ObjectId.is_valid(body_composition_id):
+            return None
+        doc = await self._db.body_compositions.find_one({"_id": ObjectId(body_composition_id)})
+        if doc is None:
+            return None
+        return {
+            "id": str(doc["_id"]),
+            "at": doc.get("at"),
+            "provider": doc.get("provider"),
+            "metrics": doc.get("metrics", {}),
+            "attachment_url": doc.get("attachment_url"),
+            "attachment_type": doc.get("attachment_type"),
+        }
+
+    async def get_plan_summary(self, plan_id: str) -> dict | None:
+        if not ObjectId.is_valid(plan_id):
+            return None
+        plan = await self._db.plans.find_one({"_id": ObjectId(plan_id)})
+        if plan is None:
+            return None
+        return {
+            "id": str(plan["_id"]),
+            "name": plan.get("name"),
+            "goal": plan.get("goal", "custom"),
+            "duration_days": plan.get("duration_days", 7),
+        }
+
     def _serialize_appointment(self, doc: dict) -> dict:
         return {
             "id": str(doc["_id"]),
@@ -321,6 +349,10 @@ class MongoMeRepository:
             "status": doc.get("status"),
             "note": doc.get("note"),
             "owner_id": str(doc.get("owner_id")) if doc.get("owner_id") else None,
+            "plan_id": str(doc["plan_id"]) if doc.get("plan_id") else None,
+            "body_composition_id": str(doc["body_composition_id"])
+            if doc.get("body_composition_id")
+            else None,
         }
 
     def _serialize_measurement(self, doc: dict) -> dict:

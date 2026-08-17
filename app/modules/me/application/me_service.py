@@ -64,6 +64,36 @@ class MeService:
             to_dt=to_dt,
         )
 
+    async def list_consultations(self, user_id: str) -> list[dict]:
+        patient = await self._repository.get_patient_for_user(user_id)
+        if not patient:
+            return []
+        appointments = await self._repository.list_appointments(patient["id"])
+
+        consultations = []
+        for appointment in appointments:
+            plan = None
+            plan_id = appointment.get("plan_id")
+            if plan_id:
+                plan = await self._repository.get_plan_summary(plan_id)
+
+            body_composition = None
+            body_composition_id = appointment.get("body_composition_id")
+            if body_composition_id:
+                body_composition = await self._repository.get_body_composition_by_id(
+                    body_composition_id
+                )
+
+            consultations.append(
+                {**appointment, "plan": plan, "body_composition": body_composition}
+            )
+
+        consultations.sort(
+            key=lambda item: item.get("start") or datetime.min,
+            reverse=True,
+        )
+        return consultations
+
     async def get_active_plan(self, user_id: str) -> dict | None:
         patient = await self._repository.get_patient_for_user(user_id)
         if not patient:

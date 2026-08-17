@@ -27,6 +27,7 @@ class AppointmentsService:
         from_dt: datetime | None = None,
         to_dt: datetime | None = None,
         query: str | None = None,
+        patient_id: str | None = None,
     ) -> list[Appointment]:
         return await self._repository.list_for_owner(
             owner_id,
@@ -34,6 +35,7 @@ class AppointmentsService:
             from_dt=from_dt,
             to_dt=to_dt,
             query=query,
+            patient_id=patient_id,
         )
 
     async def create_appointment(
@@ -47,6 +49,7 @@ class AppointmentsService:
         status: str,
         note: str | None,
         plan_id: str | None,
+        body_composition_id: str | None,
         no_sync: bool,
     ) -> Appointment:
         resolved_end = end or (start + timedelta(minutes=30))
@@ -62,6 +65,7 @@ class AppointmentsService:
             status=status,
             note=note,
             plan_id=plan_id,
+            body_composition_id=body_composition_id,
             no_sync=no_sync,
         )
 
@@ -100,6 +104,7 @@ class AppointmentsService:
         status: str | None,
         note: str | None,
         plan_id: str | None,
+        body_composition_id: str | None,
         no_sync: bool | None,
     ) -> Appointment:
         current = await self._repository.get_for_owner(owner_id, appointment_id)
@@ -122,6 +127,8 @@ class AppointmentsService:
             updates["note"] = note
         if plan_id is not None:
             updates["plan_id"] = plan_id
+        if body_composition_id is not None:
+            updates["body_composition_id"] = body_composition_id
         if no_sync is not None:
             updates["no_sync"] = no_sync
 

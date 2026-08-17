@@ -15,6 +15,8 @@
 - `011-back-grip-strength-metric`
 - `012-back-plan-attachment`
 - `013-back-plan-days-passthrough`
+- `014-back-consultation-history-linkage`
+- `015-back-appointments-patient-filter`
 
 ## Next Recommended Specs
 

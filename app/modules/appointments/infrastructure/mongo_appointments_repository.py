@@ -19,11 +19,14 @@ class MongoAppointmentsRepository:
         from_dt: datetime | None,
         to_dt: datetime | None,
         query: str | None,
+        patient_id: str | None = None,
     ) -> list[Appointment]:
         owner_oid = self._as_oid(owner_id, field_name="owner")
         match: dict[str, Any] = {"owner_id": owner_oid}
         if status:
             match["status"] = status
+        if patient_id:
+            match["patient_id"] = self._oid_maybe(patient_id)
         match.update(self._match_from_to(from_dt, to_dt))
 
         pipeline: list[dict[str, Any]] = [
@@ -90,6 +93,7 @@ class MongoAppointmentsRepository:
         status: str,
         note: str | None,
         plan_id: str | None,
+        body_composition_id: str | None,
         no_sync: bool,
     ) -> Appointment:
         owner_oid = self._as_oid(owner_id, field_name="owner")
@@ -103,6 +107,7 @@ class MongoAppointmentsRepository:
             "status": status,
             "note": note,
             "plan_id": self._oid_maybe(plan_id),
+            "body_composition_id": self._oid_maybe(body_composition_id),
             "no_sync": no_sync,
             "created_at": now,
             "updated_at": now,
@@ -127,6 +132,10 @@ class MongoAppointmentsRepository:
             mongo_updates["patient_id"] = self._oid_maybe(mongo_updates["patient_id"])
         if "plan_id" in mongo_updates:
             mongo_updates["plan_id"] = self._oid_maybe(mongo_updates["plan_id"])
+        if "body_composition_id" in mongo_updates:
+            mongo_updates["body_composition_id"] = self._oid_maybe(
+                mongo_updates["body_composition_id"]
+            )
         mongo_updates["updated_at"] = datetime.utcnow()
 
         result = await self._db.appointments.update_one(
@@ -211,6 +220,7 @@ class MongoAppointmentsRepository:
             status=doc.get("status"),
             note=doc.get("note"),
             plan_id=self._stringify_maybe_oid(doc.get("plan_id")),
+            body_composition_id=self._stringify_maybe_oid(doc.get("body_composition_id")),
             no_sync=bool(doc.get("no_sync", False)),
             google_event_id=doc.get("google_event_id"),
             patient=patient,

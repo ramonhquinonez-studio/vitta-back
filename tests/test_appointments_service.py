@@ -15,8 +15,12 @@ class _FakeAppointmentsRepository:
         self.next_id = 1
         self.patient_exists = True
 
-    async def list_for_owner(self, owner_id, *, status, from_dt, to_dt, query):
-        return [a for a in self.appointments.values() if a.owner_id == owner_id]
+    async def list_for_owner(self, owner_id, *, status, from_dt, to_dt, query, patient_id=None):
+        return [
+            a
+            for a in self.appointments.values()
+            if a.owner_id == owner_id and (patient_id is None or a.patient_id == patient_id)
+        ]
 
     async def get_for_owner(self, owner_id, appointment_id):
         appointment = self.appointments.get(appointment_id)
@@ -35,6 +39,7 @@ class _FakeAppointmentsRepository:
         status,
         note,
         plan_id,
+        body_composition_id,
         no_sync,
     ):
         appointment = Appointment(
@@ -47,6 +52,7 @@ class _FakeAppointmentsRepository:
             status=status,
             note=note,
             plan_id=plan_id,
+            body_composition_id=body_composition_id,
             no_sync=no_sync,
             patient=AppointmentPatient(id=patient_id, name="Maria"),
         )
@@ -67,6 +73,9 @@ class _FakeAppointmentsRepository:
             status=updates.get("status", current.status),
             note=updates.get("note", current.note),
             plan_id=updates.get("plan_id", current.plan_id),
+            body_composition_id=updates.get(
+                "body_composition_id", current.body_composition_id
+            ),
             no_sync=updates.get("no_sync", current.no_sync),
         )
         self.appointments[appointment_id] = updated
@@ -136,6 +145,7 @@ class AppointmentsServiceTest(unittest.IsolatedAsyncioTestCase):
             status="pending",
             note=None,
             plan_id=None,
+            body_composition_id=None,
             no_sync=False,
         )
 
@@ -149,6 +159,7 @@ class AppointmentsServiceTest(unittest.IsolatedAsyncioTestCase):
                 status="pending",
                 note=None,
                 plan_id=None,
+                body_composition_id=None,
                 no_sync=False,
             )
 
@@ -167,8 +178,45 @@ class AppointmentsServiceTest(unittest.IsolatedAsyncioTestCase):
             status="pending",
             note="Consulta inicial",
             plan_id=None,
+            body_composition_id=None,
             no_sync=False,
         )
 
         self.assertEqual(appointment.google_event_id, "google-1")
         self.assertEqual(calendar.created, [("owner-1", "1")])
+
+    async def test_list_appointments_filters_by_patient_id(self):
+        repository = _FakeAppointmentsRepository()
+        calendar = _FakeCalendarGateway()
+        service = AppointmentsService(repository, calendar)
+        start = datetime.now(UTC)
+
+        await repository.create_for_owner(
+            "owner-1",
+            patient_id="patient-1",
+            start=start,
+            end=start + timedelta(minutes=30),
+            mode="online",
+            status="confirmed",
+            note=None,
+            plan_id=None,
+            body_composition_id=None,
+            no_sync=False,
+        )
+        await repository.create_for_owner(
+            "owner-1",
+            patient_id="patient-2",
+            start=start + timedelta(hours=1),
+            end=start + timedelta(hours=1, minutes=30),
+            mode="online",
+            status="confirmed",
+            note=None,
+            plan_id=None,
+            body_composition_id=None,
+            no_sync=False,
+        )
+
+        result = await service.list_appointments("owner-1", patient_id="patient-1")
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].patient_id, "patient-1")

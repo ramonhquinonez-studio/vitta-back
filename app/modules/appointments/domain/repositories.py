@@ -13,6 +13,7 @@ class AppointmentsRepository(Protocol):
         from_dt: datetime | None,
         to_dt: datetime | None,
         query: str | None,
+        patient_id: str | None = None,
     ) -> list[Appointment]:
         ...
 
@@ -30,6 +31,7 @@ class AppointmentsRepository(Protocol):
         status: str,
         note: str | None,
         plan_id: str | None,
+        body_composition_id: str | None,
         no_sync: bool,
     ) -> Appointment:
         ...

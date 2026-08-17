@@ -78,3 +78,9 @@ class MeRepository(Protocol):
 
     async def list_body_compositions(self, patient_id: str) -> list[dict]:
         ...
+
+    async def get_body_composition_by_id(self, body_composition_id: str) -> dict | None:
+        ...
+
+    async def get_plan_summary(self, plan_id: str) -> dict | None:
+        ...

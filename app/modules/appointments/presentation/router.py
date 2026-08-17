@@ -25,6 +25,9 @@ class AppointmentCreate(BaseModel):
     status: Literal["confirmed", "pending", "canceled"] = "pending"
     note: str | None = None
     plan_id: str | None = Field(default=None, validation_alias="planId")
+    body_composition_id: str | None = Field(
+        default=None, validation_alias="bodyCompositionId"
+    )
     no_sync: bool = False
     model_config = ConfigDict(populate_by_name=True)
 
@@ -37,6 +40,9 @@ class AppointmentUpdate(BaseModel):
     status: Literal["confirmed", "pending", "canceled"] | None = None
     note: str | None = None
     plan_id: str | None = Field(default=None, validation_alias="planId")
+    body_composition_id: str | None = Field(
+        default=None, validation_alias="bodyCompositionId"
+    )
     no_sync: bool | None = None
     model_config = ConfigDict(populate_by_name=True)
 
@@ -56,6 +62,7 @@ class AppointmentOut(BaseModel):
     status: str
     note: str | None = None
     plan_id: str | None = None
+    body_composition_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     google_event_id: str | None = None
@@ -96,6 +103,7 @@ def _serialize(appointment: Appointment) -> AppointmentOut:
         status=appointment.status,
         note=appointment.note,
         plan_id=appointment.plan_id,
+        body_composition_id=appointment.body_composition_id,
         created_at=appointment.created_at,
         updated_at=appointment.updated_at,
         google_event_id=appointment.google_event_id,
@@ -109,6 +117,7 @@ async def list_appointments(
     from_: datetime | None = Query(None, alias="from"),
     to: datetime | None = Query(None, alias="to"),
     q: str | None = Query(None, description="Busca por nombre de paciente o nota"),
+    patient_id: str | None = Query(None, alias="patientId"),
     current=Depends(get_current_user),
     service: AppointmentsService = Depends(get_appointments_service),
 ):
@@ -118,6 +127,7 @@ async def list_appointments(
         from_dt=from_,
         to_dt=to,
         query=q,
+        patient_id=patient_id,
     )
     return [_serialize(item) for item in appointments]
 
@@ -138,6 +148,7 @@ async def create_appointment(
             status=payload.status,
             note=payload.note,
             plan_id=payload.plan_id,
+            body_composition_id=payload.body_composition_id,
             no_sync=payload.no_sync,
         )
     except LookupError as exc:
@@ -186,6 +197,7 @@ async def update_appointment(
             status=payload.status,
             note=payload.note,
             plan_id=payload.plan_id,
+            body_composition_id=payload.body_composition_id,
             no_sync=payload.no_sync,
         )
     except LookupError as exc:

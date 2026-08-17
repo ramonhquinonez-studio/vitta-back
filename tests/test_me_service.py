@@ -13,6 +13,9 @@ class _FakeMeRepository:
         }
         self.series = []
         self.created_payload = None
+        self.appointments = []
+        self.plans_by_id = {}
+        self.body_compositions_by_id = {}
 
     async def get_user(self, user_id):
         return {"id": user_id, "email": "maria@email.com", "name": "Maria"}
@@ -27,7 +30,7 @@ class _FakeMeRepository:
         return self.patient
 
     async def list_appointments(self, patient_id, *, from_dt=None, to_dt=None):
-        return []
+        return self.appointments
 
     async def get_active_plan(self, patient_id):
         return None
@@ -76,6 +79,12 @@ class _FakeMeRepository:
 
     async def list_body_compositions(self, patient_id):
         return []
+
+    async def get_body_composition_by_id(self, body_composition_id):
+        return self.body_compositions_by_id.get(body_composition_id)
+
+    async def get_plan_summary(self, plan_id):
+        return self.plans_by_id.get(plan_id)
 
 
 class MeServiceTest(unittest.IsolatedAsyncioTestCase):
@@ -138,3 +147,48 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(LookupError):
             await service.update_profile("user-1", {"age": 29})
+
+    async def test_list_consultations_resolves_linked_plan_and_body_composition(self):
+        repository = _FakeMeRepository()
+        repository.appointments = [
+            {
+                "id": "appt-1",
+                "start": datetime(2026, 1, 15, tzinfo=UTC),
+                "status": "confirmed",
+                "note": "Seguimiento mensual",
+                "plan_id": "plan-1",
+                "body_composition_id": "scan-1",
+            },
+            {
+                "id": "appt-2",
+                "start": datetime(2026, 2, 15, tzinfo=UTC),
+                "status": "confirmed",
+                "note": "Ajuste de plan",
+                "plan_id": None,
+                "body_composition_id": None,
+            },
+        ]
+        repository.plans_by_id = {"plan-1": {"id": "plan-1", "name": "Plan semanal"}}
+        repository.body_compositions_by_id = {
+            "scan-1": {"id": "scan-1", "metrics": {"weight_kg": 68}}
+        }
+        service = MeService(repository)
+
+        result = await service.list_consultations("user-1")
+
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["id"], "appt-2")
+        self.assertIsNone(result[0]["plan"])
+        self.assertIsNone(result[0]["body_composition"])
+        self.assertEqual(result[1]["id"], "appt-1")
+        self.assertEqual(result[1]["plan"]["name"], "Plan semanal")
+        self.assertEqual(result[1]["body_composition"]["metrics"]["weight_kg"], 68)
+
+    async def test_list_consultations_returns_empty_for_user_without_patient(self):
+        repository = _FakeMeRepository()
+        repository.patient = None
+        service = MeService(repository)
+
+        result = await service.list_consultations("user-1")
+
+        self.assertEqual(result, [])

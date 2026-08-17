@@ -78,6 +78,14 @@ async def my_appointments(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get("/consultations", response_model=list[dict])
+async def my_consultations(
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    return await service.list_consultations(_user_id(current))
+
+
 @router.get("/plan/active", response_model=dict | None)
 async def my_active_plan(
     current=Depends(get_current_user),

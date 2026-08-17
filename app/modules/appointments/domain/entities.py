@@ -20,6 +20,7 @@ class Appointment:
     status: str
     note: str | None = None
     plan_id: str | None = None
+    body_composition_id: str | None = None
     no_sync: bool = False
     google_event_id: str | None = None
     patient: AppointmentPatient | None = None
