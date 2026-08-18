@@ -25,6 +25,7 @@
 - `021-back-food-diary`
 - `022-back-recommendations`
 - `023-back-plan-eating-out-options`
+- `024-back-plan-assignment-history`
 
 ## Next Recommended Specs
 

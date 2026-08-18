@@ -10,6 +10,7 @@ class _FakePatientsRepository:
         self.sequence = 1
         self.body_compositions: dict[str, list[dict]] = {}
         self.food_diary_entries: dict[str, list[dict]] = {}
+        self.plan_assignments: dict[str, list[dict]] = {}
 
     async def list_for_owner(self, owner_id, *, page, limit, query=None):
         items = [p for p in self.patients.values() if p.owner_id == owner_id]
@@ -73,6 +74,12 @@ class _FakePatientsRepository:
         if patient is None:
             return None
         return self.food_diary_entries.get(patient_id, [])
+
+    async def list_plan_assignments(self, owner_id, patient_id):
+        patient = await self.get_for_owner(owner_id, patient_id)
+        if patient is None:
+            return None
+        return self.plan_assignments.get(patient_id, [])
 
 
 class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
@@ -140,3 +147,25 @@ class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(LookupError):
             await service.list_food_diary_entries("owner-2", patient.id)
+
+    async def test_list_plan_assignments_returns_the_patients_history(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+        repository.plan_assignments[patient.id] = [
+            {"plan_id": "plan-2", "plan_name": "Plan B", "assigned_at": "2026-08-10"},
+            {"plan_id": "plan-1", "plan_name": "Plan A", "assigned_at": "2026-08-01"},
+        ]
+
+        result = await service.list_plan_assignments("owner-1", patient.id)
+
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["plan_name"], "Plan B")
+
+    async def test_list_plan_assignments_rejects_a_patient_not_owned(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+
+        with self.assertRaises(LookupError):
+            await service.list_plan_assignments("owner-2", patient.id)
