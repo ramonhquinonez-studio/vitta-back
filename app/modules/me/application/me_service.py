@@ -268,6 +268,12 @@ class MeService:
             return []
         return await self._repository.list_education_videos(patient.get("owner_id"))
 
+    async def get_nutritionist_profile(self, user_id: str) -> dict | None:
+        patient = await self._repository.get_patient_for_user(user_id)
+        if not patient:
+            return None
+        return await self._repository.get_nutritionist_profile(patient.get("owner_id"))
+
     async def get_clinical_history(self, user_id: str) -> dict[str, Any]:
         patient = await self._repository.get_patient_for_user(user_id)
         if not patient:

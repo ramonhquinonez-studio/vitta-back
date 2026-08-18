@@ -73,6 +73,9 @@ class MeRepository(Protocol):
     async def list_education_videos(self, owner_id: str | None) -> list[dict]:
         ...
 
+    async def get_nutritionist_profile(self, owner_id: str | None) -> dict | None:
+        ...
+
     async def list_clinical_notes(self, patient_id: str) -> list[dict]:
         ...
 

@@ -283,6 +283,27 @@ class MongoMeRepository:
             async for doc in cursor
         ]
 
+    async def get_nutritionist_profile(self, owner_id: str | None) -> dict | None:
+        if not owner_id:
+            return None
+        owner_oid = self._as_oid(owner_id)
+        user = await self._db.users.find_one({"_id": owner_oid})
+        if user is None:
+            return None
+        profile = await self._db.nutritionist_profiles.find_one({"owner_id": owner_oid})
+        patient_count = await self._db.patients.count_documents({"owner_id": owner_oid})
+        profile = profile or {}
+        return {
+            "name": user.get("name"),
+            "role_label": profile.get("role_label"),
+            "bio": profile.get("bio"),
+            "years_experience": profile.get("years_experience"),
+            "session_price": profile.get("session_price"),
+            "session_price_currency": profile.get("session_price_currency") or "MXN",
+            "social_links": profile.get("social_links") or [],
+            "patient_count": patient_count,
+        }
+
     async def list_clinical_notes(self, patient_id: str) -> list[dict]:
         patient_oid = self._as_oid(patient_id)
         cursor = self._db.clinical_notes.find({"patient_id": patient_oid}).sort("at", -1)

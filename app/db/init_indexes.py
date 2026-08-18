@@ -50,6 +50,9 @@ async def ensure_indexes() -> None:
     # ---------- RECIPE COLLECTIONS ----------
     await db.recipe_collections.create_index("owner_id")
 
+    # ---------- NUTRITIONIST PROFILES ----------
+    await db.nutritionist_profiles.create_index("owner_id", unique=True)
+
     # ---------- INVITE CODES (self-registration) ----------
     await db.invite_codes.create_index("code", unique=True)
     await db.invite_codes.create_index("owner_id")

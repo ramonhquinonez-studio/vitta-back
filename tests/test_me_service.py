@@ -74,6 +74,20 @@ class _FakeMeRepository:
     async def list_education_videos(self, owner_id):
         return []
 
+    async def get_nutritionist_profile(self, owner_id):
+        if not owner_id:
+            return None
+        return {
+            "name": "Dra. Ruiz",
+            "role_label": "Nutrióloga clínica",
+            "bio": "Bio de prueba",
+            "years_experience": 10,
+            "session_price": 500.0,
+            "session_price_currency": "MXN",
+            "social_links": [{"platform": "instagram", "handle": "@dra.ruiz"}],
+            "patient_count": 42,
+        }
+
     async def list_clinical_notes(self, patient_id):
         return []
 
@@ -192,3 +206,21 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
         result = await service.list_consultations("user-1")
 
         self.assertEqual(result, [])
+
+    async def test_get_nutritionist_profile_resolves_through_the_linked_patients_owner(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+
+        result = await service.get_nutritionist_profile("user-1")
+
+        self.assertEqual(result["name"], "Dra. Ruiz")
+        self.assertEqual(result["patient_count"], 42)
+
+    async def test_get_nutritionist_profile_returns_none_for_user_without_patient(self):
+        repository = _FakeMeRepository()
+        repository.patient = None
+        service = MeService(repository)
+
+        result = await service.get_nutritionist_profile("user-1")
+
+        self.assertIsNone(result)

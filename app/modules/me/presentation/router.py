@@ -255,6 +255,14 @@ async def my_education_videos(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get("/nutritionist_profile", response_model=dict | None)
+async def my_nutritionist_profile(
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    return await service.get_nutritionist_profile(_user_id(current))
+
+
 @router.get("/clinical/history", response_model=dict)
 async def my_clinical_history(
     current=Depends(get_current_user),
