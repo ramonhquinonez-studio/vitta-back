@@ -56,6 +56,25 @@ class AuthService:
         await self._repository.consume_invite_code(invite["code"], user.id)
         return user
 
+    async def register_nutritionist(
+        self, *, name: str, email: str, password: str
+    ) -> AuthUser:
+        normalized_email = self._normalize_email(email)
+        normalized_name = (name or "").strip()
+        if not normalized_name:
+            raise ValueError("Name is required")
+
+        existing = await self._repository.get_user_by_email(normalized_email)
+        if existing is not None:
+            raise FileExistsError("Email already registered")
+
+        return await self._repository.create_user(
+            name=normalized_name,
+            email=normalized_email,
+            password_hash=hash_password(password),
+            role="nutritionist",
+        )
+
     async def forgot_password(self, *, email: str) -> str | None:
         """Devuelve el token de reset si el correo existe; None si no (el
         router siempre responde con el mismo mensaje genérico para no

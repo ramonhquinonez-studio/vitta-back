@@ -48,3 +48,11 @@ async def update_my_nutritionist_profile(
         return await service.update_my_profile(_owner_id(current), updates)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/me/complete-onboarding", response_model=NutritionistProfileOut)
+async def complete_my_onboarding(
+    current=Depends(get_current_user),
+    service: NutritionistProfileService = Depends(get_nutritionist_profile_service),
+):
+    return await service.complete_onboarding(_owner_id(current))

@@ -15,6 +15,26 @@ def _serialize(profile: NutritionistProfile, patient_count: int) -> dict[str, An
             {"platform": link.platform, "handle": link.handle}
             for link in profile.social_links
         ],
+        "cedula": profile.cedula,
+        "practice_name": profile.practice_name,
+        "logo_url": profile.logo_url,
+        "brand_color": profile.brand_color,
+        "city": profile.city,
+        "specializations": profile.specializations,
+        "energy_equation": profile.energy_equation,
+        "portions_mode": profile.portions_mode,
+        "macro_split": (
+            {
+                "protein_pct": profile.macro_split.protein_pct,
+                "carbs_pct": profile.macro_split.carbs_pct,
+                "fat_pct": profile.macro_split.fat_pct,
+            }
+            if profile.macro_split
+            else None
+        ),
+        "units": profile.units,
+        "meals_per_day": profile.meals_per_day,
+        "onboarding_completed_at": profile.onboarding_completed_at,
         "patient_count": patient_count,
     }
 
@@ -34,6 +54,11 @@ class NutritionistProfileService:
         if not payload:
             raise ValueError("No fields to update")
         profile = await self._repository.upsert_for_owner(owner_id, payload)
+        patient_count = await self._repository.count_patients_for_owner(owner_id)
+        return _serialize(profile, patient_count)
+
+    async def complete_onboarding(self, owner_id: str) -> dict[str, Any]:
+        profile = await self._repository.mark_onboarding_completed(owner_id)
         patient_count = await self._repository.count_patients_for_owner(owner_id)
         return _serialize(profile, patient_count)
 

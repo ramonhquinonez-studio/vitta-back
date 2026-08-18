@@ -8,6 +8,11 @@ class RegisterIn(BaseModel):
     password: str = Field(..., min_length=6)
     invite_code: str = Field(..., min_length=4, max_length=40)
 
+class RegisterNutritionistIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+    email: EmailStr
+    password: str = Field(..., min_length=6)
+
 class LoginIn(BaseModel):
     email: EmailStr
     password: str

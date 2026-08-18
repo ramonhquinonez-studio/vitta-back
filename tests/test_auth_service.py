@@ -93,6 +93,32 @@ class AuthServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(repository.patients[0]["owner_id"], "owner-1")
         self.assertIsNotNone(repository.invite_codes["DEMO2026"]["used_at"])
 
+    async def test_register_nutritionist_creates_a_nutritionist_user_without_invite_code(self):
+        repository = _FakeAuthRepository()
+        service = AuthService(repository)
+
+        user = await service.register_nutritionist(
+            name="Dra. Ruiz",
+            email=" Dra.Ruiz@Email.com ",
+            password="secret123",
+        )
+
+        self.assertEqual(user.email, "dra.ruiz@email.com")
+        self.assertEqual(user.role, "nutritionist")
+        self.assertEqual(repository.patients, [])  # no patient record created
+
+    async def test_register_nutritionist_rejects_a_duplicate_email(self):
+        repository = _FakeAuthRepository()
+        service = AuthService(repository)
+        await service.register_nutritionist(
+            name="Dra. Ruiz", email="dra.ruiz@email.com", password="secret123"
+        )
+
+        with self.assertRaises(FileExistsError):
+            await service.register_nutritionist(
+                name="Otra", email="dra.ruiz@email.com", password="secret456"
+            )
+
     async def test_register_rejects_unknown_invite_code(self):
         service = AuthService(_FakeAuthRepository())
 

@@ -10,6 +10,7 @@ from app.schemas.auth import (
     LoginIn,
     RefreshIn,
     RegisterIn,
+    RegisterNutritionistIn,
     ResetPasswordIn,
     TokensOut,
 )
@@ -48,6 +49,25 @@ async def register(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return RegisterOut(id=user.id, email=user.email)
+
+
+@router.post("/register-nutritionist", response_model=RegisterOut)
+async def register_nutritionist(
+    payload: RegisterNutritionistIn,
+    service: AuthService = Depends(get_auth_service),
+):
+    try:
+        user = await service.register_nutritionist(
+            name=payload.name,
+            email=payload.email,
+            password=payload.password,
+        )
+    except FileExistsError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

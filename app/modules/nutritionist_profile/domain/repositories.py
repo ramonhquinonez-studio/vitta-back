@@ -12,3 +12,6 @@ class NutritionistProfileRepository(Protocol):
 
     async def count_patients_for_owner(self, owner_id: str) -> int:
         ...
+
+    async def mark_onboarding_completed(self, owner_id: str) -> NutritionistProfile:
+        ...
