@@ -24,6 +24,7 @@ from app.routers import (
     google_oauth as google_router,
     me as me_router,
     nutritionist_profile as nutritionist_profile_router,
+    recipes as recipes_router,
 )
 
 @asynccontextmanager
@@ -70,6 +71,7 @@ app.include_router(devices_router.router)
 app.include_router(google_router.router)
 app.include_router(me_router.router, tags=["me"])
 app.include_router(nutritionist_profile_router.router, tags=["nutritionist_profile"])
+app.include_router(recipes_router.router, tags=["recipes"])
 
 os.makedirs(settings.UPLOADS_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.UPLOADS_DIR), name="uploads")

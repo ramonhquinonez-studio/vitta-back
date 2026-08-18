@@ -8,6 +8,7 @@ from app.modules.nutritionist_profile.presentation.router import (
 )
 from app.modules.patients.presentation.router import router as patients_router
 from app.modules.plans.presentation.router import router as plans_router
+from app.modules.recipes.presentation.router import router as recipes_router
 
 
 class ModuleRouterSmokeTest(unittest.TestCase):
@@ -19,6 +20,7 @@ class ModuleRouterSmokeTest(unittest.TestCase):
             "me": me_router,
             "plans": plans_router,
             "nutritionist_profile": nutritionist_profile_router,
+            "recipes": recipes_router,
         }
 
         for name, router in routers.items():
@@ -35,6 +37,7 @@ class ModuleRouterSmokeTest(unittest.TestCase):
                 me_router,
                 plans_router,
                 nutritionist_profile_router,
+                recipes_router,
             ]
             for route in router.routes
         }
@@ -45,3 +48,4 @@ class ModuleRouterSmokeTest(unittest.TestCase):
         self.assertIn("/me/profile", paths)
         self.assertIn("/plans", paths)
         self.assertIn("/nutritionist_profile/me", paths)
+        self.assertIn("/recipe_collections", paths)

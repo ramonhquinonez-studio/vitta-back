@@ -18,7 +18,12 @@
 - `014-back-consultation-history-linkage`
 - `015-back-appointments-patient-filter`
 - `016-back-overlap-conflict-serialization-fix`
+- `017-back-nutritionist-profile`
+- `018-back-recipe-collections-owner-read`
 
 ## Next Recommended Specs
 
-No hay specs pendientes en el roadmap base de bootstrap arquitectónico.
+- Recipe collection/recipe authoring (`POST/PATCH/DELETE`) — `018` only added the owner-facing read; content is still seed-only.
+- Nutritionist-facing `GET /patients/{id}/body_compositions` (list) — InBody scans can be logged (`011-back-grip-strength-metric` era) but not listed back by the owner.
+- Food diary / eating-out log persistence — zero backend concept exists today; fully local state on the `nutri_app` side.
+- Supplements/recommended brands — no backend concept exists; currently hardcoded static content in `nutri_app`.
