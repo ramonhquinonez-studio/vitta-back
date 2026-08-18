@@ -21,9 +21,9 @@
 - `017-back-nutritionist-profile`
 - `018-back-recipe-collections-owner-read`
 - `019-back-body-compositions-list`
+- `020-back-recipe-authoring`
 
 ## Next Recommended Specs
 
-- Recipe collection/recipe authoring (`POST/PATCH/DELETE`) — `018` only added the owner-facing read; content is still seed-only.
 - Food diary / eating-out log persistence — zero backend concept exists today; fully local state on the `nutri_app` side.
 - Supplements/recommended brands — no backend concept exists; currently hardcoded static content in `nutri_app`.
