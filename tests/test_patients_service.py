@@ -8,6 +8,7 @@ class _FakePatientsRepository:
     def __init__(self):
         self.patients: dict[str, Patient] = {}
         self.sequence = 1
+        self.body_compositions: dict[str, list[dict]] = {}
 
     async def list_for_owner(self, owner_id, *, page, limit, query=None):
         items = [p for p in self.patients.values() if p.owner_id == owner_id]
@@ -60,6 +61,12 @@ class _FakePatientsRepository:
         del self.patients[patient_id]
         return True
 
+    async def list_body_compositions(self, owner_id, patient_id):
+        patient = await self.get_for_owner(owner_id, patient_id)
+        if patient is None:
+            return None
+        return self.body_compositions.get(patient_id, [])
+
 
 class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
     async def test_list_patients_returns_items_and_total(self):
@@ -84,3 +91,24 @@ class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(ValueError):
             await service.update_patient("owner-1", "1", {})
+
+    async def test_list_body_compositions_returns_the_patients_scans(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+        repository.body_compositions[patient.id] = [
+            {"id": "bc-1", "at": None, "metrics": {"weight_kg": 68.5}}
+        ]
+
+        result = await service.list_body_compositions("owner-1", patient.id)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["metrics"]["weight_kg"], 68.5)
+
+    async def test_list_body_compositions_rejects_a_patient_not_owned(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+
+        with self.assertRaises(LookupError):
+            await service.list_body_compositions("owner-2", patient.id)

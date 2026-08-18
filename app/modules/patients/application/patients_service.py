@@ -49,5 +49,11 @@ class PatientsService:
             raise LookupError("Patient not found")
         return created
 
+    async def list_body_compositions(self, owner_id: str, patient_id: str) -> list[dict]:
+        items = await self._repository.list_body_compositions(owner_id, patient_id)
+        if items is None:
+            raise LookupError("Patient not found")
+        return items
+
     async def create_invite_code(self, owner_id: str) -> dict:
         return await self._repository.create_invite_code(owner_id)
