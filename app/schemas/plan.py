@@ -8,10 +8,17 @@ class PlanMealItem(BaseModel):
     unit: str
     recipe_id: Optional[str] = None
 
+class EatingOutOption(BaseModel):
+    restaurant: str
+    dish: str
+    kcal: Optional[float] = None
+    protein: Optional[float] = None
+
 class PlanMeal(BaseModel):
     title: str
     time: Optional[str] = None
     items: List[PlanMealItem] = Field(default_factory=list)
+    eating_out_options: List[EatingOutOption] = Field(default_factory=list)
 
 class PlanCreate(BaseModel):
     name: str

@@ -24,6 +24,7 @@
 - `020-back-recipe-authoring`
 - `021-back-food-diary`
 - `022-back-recommendations`
+- `023-back-plan-eating-out-options`
 
 ## Next Recommended Specs
 

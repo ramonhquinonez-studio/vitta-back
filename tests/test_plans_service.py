@@ -1,6 +1,7 @@
 import unittest
 
 from app.modules.plans.application.plans_service import PlansService
+from app.schemas.plan import PlanCreate
 
 
 class _FakePlansRepository:
@@ -100,3 +101,34 @@ class PlansServiceTest(unittest.IsolatedAsyncioTestCase):
             await service.set_attachment(
                 "owner-1", "missing", "/uploads/x.pdf", "application/pdf"
             )
+
+
+class PlanSchemaTest(unittest.TestCase):
+    def test_plan_create_parses_eating_out_options_per_meal(self):
+        payload = PlanCreate(
+            name="Plan",
+            duration_days=7,
+            meals=[
+                {
+                    "title": "Desayuno",
+                    "items": [],
+                    "eating_out_options": [
+                        {
+                            "restaurant": "Subway",
+                            "dish": "Sandwich de pavo 6\"",
+                            "kcal": 320,
+                            "protein": 22.5,
+                        }
+                    ],
+                },
+                {"title": "Cena", "items": []},
+            ],
+        )
+
+        dumped = payload.model_dump()
+
+        self.assertEqual(len(dumped["meals"][0]["eating_out_options"]), 1)
+        self.assertEqual(
+            dumped["meals"][0]["eating_out_options"][0]["restaurant"], "Subway"
+        )
+        self.assertEqual(dumped["meals"][1]["eating_out_options"], [])
