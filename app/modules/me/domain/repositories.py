@@ -95,3 +95,8 @@ class MeRepository(Protocol):
         self, *, owner_id: str | None, patient_id: str, payload: dict
     ) -> dict:
         ...
+
+    async def list_recommendations(
+        self, owner_id: str | None, *, kind: str | None = None
+    ) -> list[dict]:
+        ...

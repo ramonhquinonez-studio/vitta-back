@@ -315,6 +315,12 @@ class MeService:
             payload=payload,
         )
 
+    async def list_recommendations(self, user_id: str, *, kind: str | None = None) -> list[dict]:
+        patient = await self._repository.get_patient_for_user(user_id)
+        if not patient:
+            return []
+        return await self._repository.list_recommendations(patient.get("owner_id"), kind=kind)
+
     async def _require_patient(self, user_id: str) -> dict:
         patient = await self._repository.get_patient_for_user(user_id)
         if not patient:

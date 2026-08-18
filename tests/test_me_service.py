@@ -99,6 +99,17 @@ class _FakeMeRepository:
         self.food_diary_entries.append(entry)
         return entry
 
+    async def list_recommendations(self, owner_id, *, kind=None):
+        if not owner_id:
+            return []
+        items = [
+            {"id": "rec-1", "kind": "supplement", "title": "Omega 3"},
+            {"id": "rec-2", "kind": "brand", "title": "Proteína Gold Standard"},
+        ]
+        if kind:
+            items = [i for i in items if i["kind"] == kind]
+        return items
+
     async def list_clinical_notes(self, patient_id):
         return []
 
@@ -261,5 +272,23 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
         service = MeService(repository)
 
         result = await service.list_food_diary_entries("user-1", limit=50)
+
+        self.assertEqual(result, [])
+
+    async def test_list_recommendations_filters_by_kind(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+
+        result = await service.list_recommendations("user-1", kind="supplement")
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["title"], "Omega 3")
+
+    async def test_list_recommendations_returns_empty_for_user_without_patient(self):
+        repository = _FakeMeRepository()
+        repository.patient = None
+        service = MeService(repository)
+
+        result = await service.list_recommendations("user-1")
 
         self.assertEqual(result, [])

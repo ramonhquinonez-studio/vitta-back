@@ -411,6 +411,34 @@ class MongoMeRepository:
             "notes": doc.get("notes"),
         }
 
+    async def list_recommendations(
+        self, owner_id: str | None, *, kind: str | None = None
+    ) -> list[dict]:
+        if not owner_id:
+            return []
+        filters: dict = {"owner_id": self._as_oid(owner_id)}
+        if kind:
+            filters["kind"] = kind
+        cursor = self._db.recommendations.find(filters).sort("created_at", -1)
+        return [
+            {
+                "id": str(doc["_id"]),
+                "kind": doc.get("kind"),
+                "title": doc.get("title"),
+                "subtitle": doc.get("subtitle"),
+                "category": doc.get("category"),
+                "brand": doc.get("brand"),
+                "description": doc.get("description"),
+                "benefits": doc.get("benefits") or [],
+                "usage": doc.get("usage"),
+                "notes": doc.get("notes"),
+                "price": doc.get("price"),
+                "rating": doc.get("rating"),
+                "emoji": doc.get("emoji"),
+            }
+            async for doc in cursor
+        ]
+
     def _serialize_appointment(self, doc: dict) -> dict:
         return {
             "id": str(doc["_id"]),

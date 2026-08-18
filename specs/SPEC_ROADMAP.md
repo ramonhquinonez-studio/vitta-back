@@ -23,7 +23,8 @@
 - `019-back-body-compositions-list`
 - `020-back-recipe-authoring`
 - `021-back-food-diary`
+- `022-back-recommendations`
 
 ## Next Recommended Specs
 
-- Supplements/recommended brands — no backend concept exists; currently hardcoded static content in `nutri_app`.
+No hay specs pendientes en el roadmap base de bootstrap arquitectónico.

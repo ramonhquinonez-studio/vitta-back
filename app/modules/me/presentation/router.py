@@ -286,6 +286,15 @@ async def add_food_diary_entry(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get("/recommendations", response_model=list[dict])
+async def my_recommendations(
+    kind: str | None = Query(None, pattern="^(supplement|brand)$"),
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    return await service.list_recommendations(_user_id(current), kind=kind)
+
+
 @router.get("/clinical/history", response_model=dict)
 async def my_clinical_history(
     current=Depends(get_current_user),
