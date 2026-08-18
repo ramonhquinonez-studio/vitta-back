@@ -7,6 +7,9 @@ class PlanMealItem(BaseModel):
     qty: float
     unit: str
     recipe_id: Optional[str] = None
+    equivalency_group_id: Optional[str] = None
+    equivalency_food_id: Optional[str] = None
+    equivalents: Optional[float] = None
 
 class EatingOutOption(BaseModel):
     restaurant: str

@@ -132,3 +132,31 @@ class PlanSchemaTest(unittest.TestCase):
             dumped["meals"][0]["eating_out_options"][0]["restaurant"], "Subway"
         )
         self.assertEqual(dumped["meals"][1]["eating_out_options"], [])
+
+    def test_plan_create_parses_equivalency_fields_on_meal_items(self):
+        payload = PlanCreate(
+            name="Plan",
+            duration_days=7,
+            meals=[
+                {
+                    "title": "Desayuno",
+                    "items": [
+                        {
+                            "name": "Tortilla de maíz",
+                            "qty": 2,
+                            "unit": "pieza",
+                            "equivalency_group_id": "cereales_sin_grasa",
+                            "equivalency_food_id": "food-1",
+                            "equivalents": 2,
+                        }
+                    ],
+                },
+            ],
+        )
+
+        dumped = payload.model_dump()
+
+        item = dumped["meals"][0]["items"][0]
+        self.assertEqual(item["equivalency_group_id"], "cereales_sin_grasa")
+        self.assertEqual(item["equivalency_food_id"], "food-1")
+        self.assertEqual(item["equivalents"], 2)

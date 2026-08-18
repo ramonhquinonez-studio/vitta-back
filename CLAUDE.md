@@ -28,7 +28,7 @@ Feature code lives in `app/modules/<feature>/` with hexagonal layers:
 
 Dependency direction: `presentation -> application -> domain <- infrastructure`. `domain` never imports outward.
 
-Migrated so far: `auth`, `appointments`, `patients`, `me`, `plans`, `nutritionist_profile`, `recipes`, `recommendations`. Their legacy `app/routers/<name>.py` files are now pinned to a single line — `from app.modules.<name>.presentation.router import router` — and `tests/test_router_wrapper_guardrails.py` fails the build if that line drifts. Never add logic back into these wrapper files.
+Migrated so far: `auth`, `appointments`, `patients`, `me`, `plans`, `nutritionist_profile`, `recipes`, `recommendations`, `equivalencies`. Their legacy `app/routers/<name>.py` files are now pinned to a single line — `from app.modules.<name>.presentation.router import router` — and `tests/test_router_wrapper_guardrails.py` fails the build if that line drifts. Never add logic back into these wrapper files.
 
 Not yet migrated (still real logic in `app/routers/`): `devices.py`, `google_oauth.py`, `health.py`, `users.py`. New modules must be born in `app/modules/`, never in `app/routers/` (`docs/architecture/ARCHITECTURE_GUARDRAILS.md`, "Rule In Force").
 

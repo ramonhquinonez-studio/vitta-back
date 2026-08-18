@@ -27,6 +27,7 @@
 - `023-back-plan-eating-out-options`
 - `024-back-plan-assignment-history`
 - `025-back-nutritionist-onboarding`
+- `026-back-equivalencies-catalog`
 
 ## Next Recommended Specs
 
