@@ -9,6 +9,7 @@ class _FakePatientsRepository:
         self.patients: dict[str, Patient] = {}
         self.sequence = 1
         self.body_compositions: dict[str, list[dict]] = {}
+        self.food_diary_entries: dict[str, list[dict]] = {}
 
     async def list_for_owner(self, owner_id, *, page, limit, query=None):
         items = [p for p in self.patients.values() if p.owner_id == owner_id]
@@ -67,6 +68,12 @@ class _FakePatientsRepository:
             return None
         return self.body_compositions.get(patient_id, [])
 
+    async def list_food_diary_entries(self, owner_id, patient_id):
+        patient = await self.get_for_owner(owner_id, patient_id)
+        if patient is None:
+            return None
+        return self.food_diary_entries.get(patient_id, [])
+
 
 class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
     async def test_list_patients_returns_items_and_total(self):
@@ -112,3 +119,24 @@ class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(LookupError):
             await service.list_body_compositions("owner-2", patient.id)
+
+    async def test_list_food_diary_entries_returns_the_patients_entries(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+        repository.food_diary_entries[patient.id] = [
+            {"id": "entry-1", "dish": "Tacos al pastor", "kcal": 450}
+        ]
+
+        result = await service.list_food_diary_entries("owner-1", patient.id)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["dish"], "Tacos al pastor")
+
+    async def test_list_food_diary_entries_rejects_a_patient_not_owned(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+
+        with self.assertRaises(LookupError):
+            await service.list_food_diary_entries("owner-2", patient.id)

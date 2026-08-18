@@ -16,6 +16,8 @@ class _FakeMeRepository:
         self.appointments = []
         self.plans_by_id = {}
         self.body_compositions_by_id = {}
+        self.food_diary_entries = []
+        self.created_food_diary_entry = None
 
     async def get_user(self, user_id):
         return {"id": user_id, "email": "maria@email.com", "name": "Maria"}
@@ -87,6 +89,15 @@ class _FakeMeRepository:
             "social_links": [{"platform": "instagram", "handle": "@dra.ruiz"}],
             "patient_count": 42,
         }
+
+    async def list_food_diary_entries(self, patient_id, *, limit):
+        return self.food_diary_entries
+
+    async def create_food_diary_entry(self, *, owner_id, patient_id, payload):
+        self.created_food_diary_entry = {"owner_id": owner_id, "patient_id": patient_id, **payload}
+        entry = {"id": "entry-1", **payload}
+        self.food_diary_entries.append(entry)
+        return entry
 
     async def list_clinical_notes(self, patient_id):
         return []
@@ -224,3 +235,31 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
         result = await service.get_nutritionist_profile("user-1")
 
         self.assertIsNone(result)
+
+    async def test_add_food_diary_entry_requires_a_dish(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+
+        with self.assertRaises(ValueError):
+            await service.add_food_diary_entry("user-1", {})
+
+    async def test_add_food_diary_entry_resolves_owner_from_the_linked_patient(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+
+        result = await service.add_food_diary_entry(
+            "user-1", {"dish": "Tacos al pastor", "kcal": 450}
+        )
+
+        self.assertEqual(result["dish"], "Tacos al pastor")
+        self.assertEqual(repository.created_food_diary_entry["owner_id"], "owner-1")
+        self.assertEqual(repository.created_food_diary_entry["patient_id"], "patient-1")
+
+    async def test_list_food_diary_entries_returns_empty_for_user_without_patient(self):
+        repository = _FakeMeRepository()
+        repository.patient = None
+        service = MeService(repository)
+
+        result = await service.list_food_diary_entries("user-1", limit=50)
+
+        self.assertEqual(result, [])

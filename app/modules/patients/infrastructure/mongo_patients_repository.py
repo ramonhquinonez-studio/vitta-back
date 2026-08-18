@@ -129,6 +129,28 @@ class MongoPatientsRepository:
             async for doc in cursor
         ]
 
+    async def list_food_diary_entries(self, owner_id: str, patient_id: str) -> list[dict] | None:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        patient_oid = self._as_oid(patient_id)
+        owned = await self._db.patients.find_one({"_id": patient_oid, "owner_id": owner_oid})
+        if owned is None:
+            return None
+
+        cursor = self._db.food_diary_entries.find({"patient_id": patient_oid}).sort("at", -1)
+        return [
+            {
+                "id": str(doc["_id"]),
+                "at": doc.get("at"),
+                "meal_title": doc.get("meal_title"),
+                "dish": doc.get("dish"),
+                "restaurant": doc.get("restaurant"),
+                "kcal": doc.get("kcal"),
+                "protein": doc.get("protein"),
+                "notes": doc.get("notes"),
+            }
+            async for doc in cursor
+        ]
+
     async def create_invite_code(self, owner_id: str) -> dict:
         owner_oid = self._as_oid(owner_id, field_name="owner")
         expires_at = datetime.utcnow() + timedelta(days=_INVITE_CODE_EXPIRE_DAYS)

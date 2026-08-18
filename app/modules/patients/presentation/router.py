@@ -218,3 +218,15 @@ async def list_patient_body_compositions(
         return await service.list_body_compositions(_owner_id(current), patient_id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{patient_id}/food_diary_entries", response_model=list[dict])
+async def list_patient_food_diary_entries(
+    patient_id: str,
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+):
+    try:
+        return await service.list_food_diary_entries(_owner_id(current), patient_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

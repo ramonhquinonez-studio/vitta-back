@@ -53,6 +53,9 @@ async def ensure_indexes() -> None:
     # ---------- NUTRITIONIST PROFILES ----------
     await db.nutritionist_profiles.create_index("owner_id", unique=True)
 
+    # ---------- FOOD DIARY ENTRIES ----------
+    await db.food_diary_entries.create_index([("patient_id", 1), ("at", -1)])
+
     # ---------- INVITE CODES (self-registration) ----------
     await db.invite_codes.create_index("code", unique=True)
     await db.invite_codes.create_index("owner_id")

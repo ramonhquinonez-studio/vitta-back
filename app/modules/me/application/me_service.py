@@ -297,6 +297,24 @@ class MeService:
             raise LookupError("Recipe not found")
         return recipe
 
+    async def list_food_diary_entries(self, user_id: str, *, limit: int) -> list[dict]:
+        patient = await self._repository.get_patient_for_user(user_id)
+        if not patient:
+            return []
+        return await self._repository.list_food_diary_entries(
+            patient["id"], limit=max(1, min(limit, 365))
+        )
+
+    async def add_food_diary_entry(self, user_id: str, payload: dict[str, Any]) -> dict:
+        if not payload.get("dish"):
+            raise ValueError("dish is required")
+        patient = await self._require_patient(user_id)
+        return await self._repository.create_food_diary_entry(
+            owner_id=patient.get("owner_id"),
+            patient_id=patient["id"],
+            payload=payload,
+        )
+
     async def _require_patient(self, user_id: str) -> dict:
         patient = await self._repository.get_patient_for_user(user_id)
         if not patient:

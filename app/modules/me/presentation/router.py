@@ -263,6 +263,29 @@ async def my_nutritionist_profile(
     return await service.get_nutritionist_profile(_user_id(current))
 
 
+@router.get("/food_diary_entries", response_model=list[dict])
+async def my_food_diary_entries(
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+    limit: int = 50,
+):
+    return await service.list_food_diary_entries(_user_id(current), limit=limit)
+
+
+@router.post("/food_diary_entries", response_model=dict, status_code=201)
+async def add_food_diary_entry(
+    payload: dict[str, Any],
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    try:
+        return await service.add_food_diary_entry(_user_id(current), payload)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/clinical/history", response_model=dict)
 async def my_clinical_history(
     current=Depends(get_current_user),

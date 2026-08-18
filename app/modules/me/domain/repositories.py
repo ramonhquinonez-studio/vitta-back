@@ -87,3 +87,11 @@ class MeRepository(Protocol):
 
     async def get_plan_summary(self, plan_id: str) -> dict | None:
         ...
+
+    async def list_food_diary_entries(self, patient_id: str, *, limit: int) -> list[dict]:
+        ...
+
+    async def create_food_diary_entry(
+        self, *, owner_id: str | None, patient_id: str, payload: dict
+    ) -> dict:
+        ...

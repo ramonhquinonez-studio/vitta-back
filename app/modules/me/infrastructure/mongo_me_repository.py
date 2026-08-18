@@ -361,6 +361,56 @@ class MongoMeRepository:
             "duration_days": plan.get("duration_days", 7),
         }
 
+    async def list_food_diary_entries(self, patient_id: str, *, limit: int) -> list[dict]:
+        patient_oid = self._as_oid(patient_id)
+        cursor = (
+            self._db.food_diary_entries.find({"patient_id": patient_oid})
+            .sort("at", -1)
+            .limit(limit)
+        )
+        return [self._serialize_food_diary_entry(doc) async for doc in cursor]
+
+    async def create_food_diary_entry(
+        self, *, owner_id: str | None, patient_id: str, payload: dict
+    ) -> dict:
+        patient_oid = self._as_oid(patient_id)
+        at_value = payload.get("at")
+        try:
+            if isinstance(at_value, str):
+                at_dt = datetime.fromisoformat(at_value.replace("Z", "+00:00"))
+            else:
+                at_dt = at_value or datetime.utcnow()
+        except Exception:
+            at_dt = datetime.utcnow()
+
+        document = {
+            "owner_id": self._as_oid(owner_id) if owner_id else None,
+            "patient_id": patient_oid,
+            "at": at_dt,
+            "meal_title": payload.get("meal_title"),
+            "dish": payload.get("dish"),
+            "restaurant": payload.get("restaurant"),
+            "kcal": payload.get("kcal"),
+            "protein": payload.get("protein"),
+            "notes": payload.get("notes"),
+            "created_at": datetime.utcnow(),
+        }
+        result = await self._db.food_diary_entries.insert_one(document)
+        document["_id"] = result.inserted_id
+        return self._serialize_food_diary_entry(document)
+
+    def _serialize_food_diary_entry(self, doc: dict) -> dict:
+        return {
+            "id": str(doc["_id"]),
+            "at": doc.get("at"),
+            "meal_title": doc.get("meal_title"),
+            "dish": doc.get("dish"),
+            "restaurant": doc.get("restaurant"),
+            "kcal": doc.get("kcal"),
+            "protein": doc.get("protein"),
+            "notes": doc.get("notes"),
+        }
+
     def _serialize_appointment(self, doc: dict) -> dict:
         return {
             "id": str(doc["_id"]),

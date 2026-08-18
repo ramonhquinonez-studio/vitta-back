@@ -22,8 +22,8 @@
 - `018-back-recipe-collections-owner-read`
 - `019-back-body-compositions-list`
 - `020-back-recipe-authoring`
+- `021-back-food-diary`
 
 ## Next Recommended Specs
 
-- Food diary / eating-out log persistence — zero backend concept exists today; fully local state on the `nutri_app` side.
 - Supplements/recommended brands — no backend concept exists; currently hardcoded static content in `nutri_app`.
