@@ -2,6 +2,7 @@ import unittest
 
 from app.modules.appointments.presentation.router import router as appointments_router
 from app.modules.auth.presentation.router import router as auth_router
+from app.modules.consultations.presentation.router import router as consultations_router
 from app.modules.equivalencies.presentation.router import router as equivalencies_router
 from app.modules.me.presentation.router import router as me_router
 from app.modules.nutritionist_profile.presentation.router import (
@@ -25,6 +26,7 @@ class ModuleRouterSmokeTest(unittest.TestCase):
             "recipes": recipes_router,
             "recommendations": recommendations_router,
             "equivalencies": equivalencies_router,
+            "consultations": consultations_router,
         }
 
         for name, router in routers.items():
@@ -44,6 +46,7 @@ class ModuleRouterSmokeTest(unittest.TestCase):
                 recipes_router,
                 recommendations_router,
                 equivalencies_router,
+                consultations_router,
             ]
             for route in router.routes
         }
@@ -57,3 +60,4 @@ class ModuleRouterSmokeTest(unittest.TestCase):
         self.assertIn("/recipe_collections", paths)
         self.assertIn("/recommendations", paths)
         self.assertIn("/equivalencies/groups", paths)
+        self.assertIn("/consultations/start", paths)

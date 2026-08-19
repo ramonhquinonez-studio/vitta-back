@@ -15,6 +15,7 @@ class RouterWrapperGuardrailsTest(unittest.TestCase):
             "app/routers/recipes.py": "from app.modules.recipes.presentation.router import router",
             "app/routers/recommendations.py": "from app.modules.recommendations.presentation.router import router",
             "app/routers/equivalencies.py": "from app.modules.equivalencies.presentation.router import router",
+            "app/routers/consultations.py": "from app.modules.consultations.presentation.router import router",
         }
 
         for relative_path, expected_line in expected.items():

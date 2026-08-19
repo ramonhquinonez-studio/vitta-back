@@ -28,7 +28,8 @@
 - `024-back-plan-assignment-history`
 - `025-back-nutritionist-onboarding`
 - `026-back-equivalencies-catalog`
+- `027-back-consultations-foundation`
 
 ## Next Recommended Specs
 
-No hay specs pendientes en el roadmap base de bootstrap arquitectónico.
+- Consultation requirement/macro calculation + per-meal distribution (Phase 2 of the "Consultation as one continuous session" redesign) — needs `027-back-consultations-foundation` and the existing `nutritionist_profile` workflow defaults/`equivalencies` catalog, both already in place.

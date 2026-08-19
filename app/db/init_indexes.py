@@ -63,6 +63,10 @@ async def ensure_indexes() -> None:
     await db.invite_codes.create_index("code", unique=True)
     await db.invite_codes.create_index("owner_id")
 
+    # ---------- CONSULTATIONS ----------
+    await db.consultations.create_index([("owner_id", 1), ("patient_id", 1), ("status", 1)])
+    await db.consultations.create_index([("owner_id", 1), ("created_at", -1)])
+
 
     # ---------- NOTIFICATIONS----------
 
