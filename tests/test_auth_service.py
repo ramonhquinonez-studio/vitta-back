@@ -60,6 +60,10 @@ class _FakeAuthRepository:
         patient["user_id"] = user_id
         return True
 
+    async def get_patient_name(self, patient_id: str) -> str | None:
+        patient = self.patients_by_id.get(patient_id)
+        return patient.get("name") if patient else None
+
     async def update_password_hash(self, user_id: str, password_hash: str) -> None:
         user = self.users_by_id.get(user_id)
         if user is None:
@@ -219,6 +223,78 @@ class AuthServiceTest(unittest.IsolatedAsyncioTestCase):
                 password="secret123",
                 invite_code="OLD",
             )
+
+    async def test_preview_invite_code_for_an_unscoped_code(self):
+        repository = _FakeAuthRepository()
+        repository.users_by_id["owner-1"] = AuthUser(
+            id="owner-1", email="dra@email.com", name="Dra. Ruiz", role="nutritionist"
+        )
+        repository.invite_codes["OPEN2026"] = {
+            "code": "OPEN2026",
+            "owner_id": "owner-1",
+            "expires_at": None,
+            "used_at": None,
+        }
+        service = AuthService(repository)
+
+        preview = await service.preview_invite_code("open2026")
+
+        self.assertEqual(
+            preview,
+            {
+                "valid": True,
+                "scoped": False,
+                "patient_name": None,
+                "nutritionist_name": "Dra. Ruiz",
+            },
+        )
+
+    async def test_preview_invite_code_for_a_scoped_code(self):
+        repository = _FakeAuthRepository()
+        repository.users_by_id["owner-1"] = AuthUser(
+            id="owner-1", email="dra@email.com", name="Dra. Ruiz", role="nutritionist"
+        )
+        repository.patients_by_id["chart-1"] = {"id": "chart-1", "name": "Juan Pérez"}
+        repository.invite_codes["LINK2026"] = {
+            "code": "LINK2026",
+            "owner_id": "owner-1",
+            "patient_id": "chart-1",
+            "expires_at": None,
+            "used_at": None,
+        }
+        service = AuthService(repository)
+
+        preview = await service.preview_invite_code("link2026")
+
+        self.assertEqual(
+            preview,
+            {
+                "valid": True,
+                "scoped": True,
+                "patient_name": "Juan Pérez",
+                "nutritionist_name": "Dra. Ruiz",
+            },
+        )
+
+    async def test_preview_invite_code_rejects_unknown_used_or_expired_codes(self):
+        repository = _FakeAuthRepository()
+        repository.invite_codes["USED"] = {
+            "code": "USED",
+            "owner_id": "owner-1",
+            "expires_at": None,
+            "used_at": datetime.utcnow(),
+        }
+        repository.invite_codes["OLD"] = {
+            "code": "OLD",
+            "owner_id": "owner-1",
+            "expires_at": datetime.utcnow() - timedelta(days=1),
+            "used_at": None,
+        }
+        service = AuthService(repository)
+
+        self.assertEqual(await service.preview_invite_code("NOPE"), {"valid": False})
+        self.assertEqual(await service.preview_invite_code("USED"), {"valid": False})
+        self.assertEqual(await service.preview_invite_code("OLD"), {"valid": False})
 
     async def test_forgot_password_returns_none_for_unknown_email(self):
         service = AuthService(_FakeAuthRepository())

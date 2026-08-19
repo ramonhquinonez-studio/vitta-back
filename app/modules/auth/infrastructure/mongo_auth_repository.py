@@ -99,6 +99,12 @@ class MongoAuthRepository:
         )
         return result.modified_count > 0
 
+    async def get_patient_name(self, patient_id: str) -> str | None:
+        if not ObjectId.is_valid(patient_id):
+            return None
+        doc = await self._db.patients.find_one({"_id": ObjectId(patient_id)}, {"name": 1})
+        return doc.get("name") if doc else None
+
     async def update_password_hash(self, user_id: str, password_hash: str) -> None:
         await self._db.users.update_one(
             {"_id": ObjectId(user_id)},

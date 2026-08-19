@@ -30,6 +30,7 @@
 - `026-back-equivalencies-catalog`
 - `027-back-consultations-foundation`
 - `028-back-patient-account-linking`
+- `029-back-invite-code-preview`
 
 ## Next Recommended Specs
 

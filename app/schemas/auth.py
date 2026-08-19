@@ -33,6 +33,12 @@ class InviteCodeOut(BaseModel):
     code: str
     expires_at: datetime
 
+class InvitePreviewOut(BaseModel):
+    valid: bool
+    scoped: bool = False
+    patient_name: str | None = None
+    nutritionist_name: str | None = None
+
 class ForgotPasswordIn(BaseModel):
     email: EmailStr
 

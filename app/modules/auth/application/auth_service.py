@@ -69,6 +69,32 @@ class AuthService:
         await self._repository.consume_invite_code(invite["code"], user.id)
         return user
 
+    async def preview_invite_code(self, code: str) -> dict:
+        """Read-only, unauthenticated lookup — lets the register screen react
+        to what a code unlocks (a specific existing patient vs. a blank
+        slate) before the patient types anything else."""
+        invite = await self._repository.get_invite_code((code or "").strip().upper())
+        if invite is None:
+            return {"valid": False}
+        if invite.get("used_at") is not None:
+            return {"valid": False}
+        expires_at = invite.get("expires_at")
+        if expires_at is not None and expires_at < datetime.utcnow():
+            return {"valid": False}
+
+        patient_id = invite.get("patient_id")
+        patient_name = None
+        if patient_id:
+            patient_name = await self._repository.get_patient_name(patient_id)
+
+        nutritionist = await self._repository.get_user_by_id(invite["owner_id"])
+        return {
+            "valid": True,
+            "scoped": patient_id is not None and patient_name is not None,
+            "patient_name": patient_name,
+            "nutritionist_name": nutritionist.name if nutritionist else None,
+        }
+
     async def register_nutritionist(
         self, *, name: str, email: str, password: str
     ) -> AuthUser:

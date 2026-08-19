@@ -7,6 +7,7 @@ from app.db.mongo import get_db
 from app.schemas.auth import (
     ForgotPasswordIn,
     ForgotPasswordOut,
+    InvitePreviewOut,
     LoginIn,
     RefreshIn,
     RegisterIn,
@@ -31,6 +32,15 @@ def get_auth_service(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> AuthService:
     return AuthService(MongoAuthRepository(db))
+
+
+@router.get("/invite-codes/{code}", response_model=InvitePreviewOut)
+async def preview_invite_code(
+    code: str,
+    service: AuthService = Depends(get_auth_service),
+):
+    result = await service.preview_invite_code(code)
+    return InvitePreviewOut(**result)
 
 
 @router.post("/register", response_model=RegisterOut)
