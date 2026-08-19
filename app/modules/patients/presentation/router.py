@@ -41,6 +41,7 @@ def _serialize(patient: Patient) -> PatientOut:
         allergies=patient.allergies,
         notes=patient.notes,
         owner_id=patient.owner_id,
+        user_id=patient.user_id,
     )
 
 
@@ -81,6 +82,24 @@ async def create_invite_code(
     service: PatientsService = Depends(get_patients_service),
 ):
     return await service.create_invite_code(_owner_id(current))
+
+
+@router.post("/{patient_id}/invite-code", response_model=InviteCodeOut, status_code=201)
+async def create_patient_invite_code(
+    patient_id: str,
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+):
+    """Generates a code scoped to an existing chart-only patient — when
+    redeemed, it links the new account to this patient instead of creating a
+    duplicate (see `027-back-consultations-foundation`'s sibling spec
+    `029-back-patient-account-linking`)."""
+    try:
+        return await service.create_invite_code(_owner_id(current), patient_id=patient_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/{patient_id}", response_model=PatientOut)

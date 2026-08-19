@@ -48,11 +48,24 @@ class AuthService:
             password_hash=hash_password(password),
             role="patient",
         )
-        await self._repository.create_patient_for_user(
-            user_id=user.id,
-            owner_id=invite["owner_id"],
-            name=normalized_name,
-        )
+
+        patient_id = invite.get("patient_id")
+        linked = False
+        if patient_id:
+            linked = await self._repository.link_user_to_patient(
+                user_id=user.id, patient_id=patient_id
+            )
+        if not linked:
+            # Either this was an unscoped invite (no patient_id at all), or
+            # the linked chart was claimed/removed between invite creation
+            # and redemption — either way, the new account still needs a
+            # patient record, not silently none at all.
+            await self._repository.create_patient_for_user(
+                user_id=user.id,
+                owner_id=invite["owner_id"],
+                name=normalized_name,
+            )
+
         await self._repository.consume_invite_code(invite["code"], user.id)
         return user
 

@@ -29,6 +29,7 @@
 - `025-back-nutritionist-onboarding`
 - `026-back-equivalencies-catalog`
 - `027-back-consultations-foundation`
+- `028-back-patient-account-linking`
 
 ## Next Recommended Specs
 

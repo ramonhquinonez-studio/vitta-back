@@ -67,5 +67,11 @@ class PatientsService:
             raise LookupError("Patient not found")
         return items
 
-    async def create_invite_code(self, owner_id: str) -> dict:
-        return await self._repository.create_invite_code(owner_id)
+    async def create_invite_code(self, owner_id: str, patient_id: str | None = None) -> dict:
+        if patient_id is not None:
+            patient = await self._repository.get_for_owner(owner_id, patient_id)
+            if patient is None:
+                raise LookupError("Patient not found")
+            if patient.user_id is not None:
+                raise ValueError("Patient already has a linked account")
+        return await self._repository.create_invite_code(owner_id, patient_id=patient_id)

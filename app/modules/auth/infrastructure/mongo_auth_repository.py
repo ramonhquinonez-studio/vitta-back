@@ -54,6 +54,7 @@ class MongoAuthRepository:
         return {
             "code": doc["code"],
             "owner_id": str(doc["owner_id"]),
+            "patient_id": str(doc["patient_id"]) if doc.get("patient_id") else None,
             "expires_at": doc.get("expires_at"),
             "used_at": doc.get("used_at"),
         }
@@ -88,6 +89,15 @@ class MongoAuthRepository:
                 "created_at": datetime.utcnow(),
             }
         )
+
+    async def link_user_to_patient(self, *, user_id: str, patient_id: str) -> bool:
+        if not ObjectId.is_valid(patient_id):
+            return False
+        result = await self._db.patients.update_one(
+            {"_id": ObjectId(patient_id), "user_id": None},
+            {"$set": {"user_id": ObjectId(user_id)}},
+        )
+        return result.modified_count > 0
 
     async def update_password_hash(self, user_id: str, password_hash: str) -> None:
         await self._db.users.update_one(

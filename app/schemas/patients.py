@@ -26,3 +26,4 @@ class PatientOut(BaseModel):
     allergies: Optional[List[str]] = None
     notes: Optional[str] = None
     owner_id: str
+    user_id: Optional[str] = None

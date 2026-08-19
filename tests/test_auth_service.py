@@ -13,6 +13,7 @@ class _FakeAuthRepository:
         self.users_by_id: dict[str, AuthUser] = {}
         self.invite_codes: dict[str, dict] = {}
         self.patients: list[dict] = []
+        self.patients_by_id: dict[str, dict] = {}
         self.sequence = 0
 
     async def get_user_by_email(self, email: str) -> AuthUser | None:
@@ -51,6 +52,13 @@ class _FakeAuthRepository:
 
     async def create_patient_for_user(self, *, user_id: str, owner_id: str, name: str) -> None:
         self.patients.append({"user_id": user_id, "owner_id": owner_id, "name": name})
+
+    async def link_user_to_patient(self, *, user_id: str, patient_id: str) -> bool:
+        patient = self.patients_by_id.get(patient_id)
+        if patient is None or patient.get("user_id") is not None:
+            return False
+        patient["user_id"] = user_id
+        return True
 
     async def update_password_hash(self, user_id: str, password_hash: str) -> None:
         user = self.users_by_id.get(user_id)
@@ -92,6 +100,52 @@ class AuthServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(repository.patients), 1)
         self.assertEqual(repository.patients[0]["owner_id"], "owner-1")
         self.assertIsNotNone(repository.invite_codes["DEMO2026"]["used_at"])
+
+    async def test_register_with_a_patient_scoped_invite_links_the_existing_patient(self):
+        repository = _FakeAuthRepository()
+        repository.patients_by_id["chart-1"] = {
+            "id": "chart-1",
+            "name": "Juan Pérez",
+            "user_id": None,
+        }
+        repository.invite_codes["LINK2026"] = {
+            "code": "LINK2026",
+            "owner_id": "owner-1",
+            "patient_id": "chart-1",
+            "expires_at": None,
+            "used_at": None,
+        }
+        service = AuthService(repository)
+
+        user = await service.register(
+            name="Juan Pérez",
+            email="juan@email.com",
+            password="secret123",
+            invite_code="link2026",
+        )
+
+        self.assertEqual(repository.patients_by_id["chart-1"]["user_id"], user.id)
+        self.assertEqual(repository.patients, [])  # no duplicate patient created
+
+    async def test_register_falls_back_to_a_new_patient_if_the_linked_chart_is_gone(self):
+        repository = _FakeAuthRepository()
+        repository.invite_codes["GONE2026"] = {
+            "code": "GONE2026",
+            "owner_id": "owner-1",
+            "patient_id": "does-not-exist",
+            "expires_at": None,
+            "used_at": None,
+        }
+        service = AuthService(repository)
+
+        await service.register(
+            name="Maria",
+            email="maria2@email.com",
+            password="secret123",
+            invite_code="gone2026",
+        )
+
+        self.assertEqual(len(repository.patients), 1)
 
     async def test_register_nutritionist_creates_a_nutritionist_user_without_invite_code(self):
         repository = _FakeAuthRepository()

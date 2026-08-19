@@ -173,8 +173,9 @@ class MongoPatientsRepository:
             )
         return results
 
-    async def create_invite_code(self, owner_id: str) -> dict:
+    async def create_invite_code(self, owner_id: str, patient_id: str | None = None) -> dict:
         owner_oid = self._as_oid(owner_id, field_name="owner")
+        patient_oid = self._as_oid(patient_id) if patient_id is not None else None
         expires_at = datetime.utcnow() + timedelta(days=_INVITE_CODE_EXPIRE_DAYS)
 
         for _ in range(5):
@@ -186,6 +187,7 @@ class MongoPatientsRepository:
                     {
                         "code": code,
                         "owner_id": owner_oid,
+                        "patient_id": patient_oid,
                         "created_at": datetime.utcnow(),
                         "expires_at": expires_at,
                         "used_at": None,
@@ -207,9 +209,15 @@ class MongoPatientsRepository:
             height_cm=document.get("height_cm"),
             allergies=list(document.get("allergies") or []),
             notes=document.get("notes"),
+            user_id=self._stringify_maybe_oid(document.get("user_id")),
         )
 
     def _as_oid(self, id_str: str, field_name: str = "id") -> ObjectId:
         if not ObjectId.is_valid(id_str):
             raise ValueError(f"Invalid {field_name}")
         return ObjectId(id_str)
+
+    def _stringify_maybe_oid(self, value):
+        if isinstance(value, ObjectId):
+            return str(value)
+        return value

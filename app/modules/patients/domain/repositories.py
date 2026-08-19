@@ -38,5 +38,5 @@ class PatientsRepository(Protocol):
     async def list_plan_assignments(self, owner_id: str, patient_id: str) -> list[dict] | None:
         ...
 
-    async def create_invite_code(self, owner_id: str) -> dict:
+    async def create_invite_code(self, owner_id: str, patient_id: str | None = None) -> dict:
         ...

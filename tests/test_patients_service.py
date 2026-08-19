@@ -11,6 +11,8 @@ class _FakePatientsRepository:
         self.body_compositions: dict[str, list[dict]] = {}
         self.food_diary_entries: dict[str, list[dict]] = {}
         self.plan_assignments: dict[str, list[dict]] = {}
+        self.invite_sequence = 0
+        self.last_invite_patient_id = "unset"
 
     async def list_for_owner(self, owner_id, *, page, limit, query=None):
         items = [p for p in self.patients.values() if p.owner_id == owner_id]
@@ -28,6 +30,7 @@ class _FakePatientsRepository:
             height_cm=payload.get("height_cm"),
             allergies=list(payload.get("allergies") or []),
             notes=payload.get("notes"),
+            user_id=payload.get("user_id"),
         )
         self.patients[patient.id] = patient
         self.sequence += 1
@@ -80,6 +83,11 @@ class _FakePatientsRepository:
         if patient is None:
             return None
         return self.plan_assignments.get(patient_id, [])
+
+    async def create_invite_code(self, owner_id, patient_id=None):
+        self.invite_sequence += 1
+        self.last_invite_patient_id = patient_id
+        return {"code": f"CODE{self.invite_sequence}", "expires_at": None}
 
 
 class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
@@ -169,3 +177,40 @@ class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(LookupError):
             await service.list_plan_assignments("owner-2", patient.id)
+
+    async def test_create_invite_code_without_a_patient_id_delegates_directly(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+
+        invite = await service.create_invite_code("owner-1")
+
+        self.assertEqual(invite["code"], "CODE1")
+        self.assertIsNone(repository.last_invite_patient_id)
+
+    async def test_create_invite_code_for_an_existing_unlinked_patient_succeeds(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Juan"})
+
+        invite = await service.create_invite_code("owner-1", patient_id=patient.id)
+
+        self.assertEqual(invite["code"], "CODE1")
+        self.assertEqual(repository.last_invite_patient_id, patient.id)
+
+    async def test_create_invite_code_rejects_an_already_linked_patient(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner(
+            "owner-1", {"name": "Juan", "user_id": "user-1"}
+        )
+
+        with self.assertRaises(ValueError):
+            await service.create_invite_code("owner-1", patient_id=patient.id)
+
+    async def test_create_invite_code_rejects_a_patient_not_owned(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Juan"})
+
+        with self.assertRaises(LookupError):
+            await service.create_invite_code("owner-2", patient_id=patient.id)
