@@ -6,7 +6,10 @@ class RegisterIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=80)
     email: EmailStr
     password: str = Field(..., min_length=6)
-    invite_code: str = Field(..., min_length=4, max_length=40)
+    # Omitted/blank means self-registration with no nutritionist yet — the
+    # patient gets a connection code to share instead (see
+    # `030-back-patient-self-registration`).
+    invite_code: str | None = Field(None, max_length=40)
 
 class RegisterNutritionistIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=80)

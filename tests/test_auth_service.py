@@ -60,6 +60,14 @@ class _FakeAuthRepository:
         patient["user_id"] = user_id
         return True
 
+    async def create_unowned_patient_for_user(self, *, user_id: str, name: str) -> str:
+        self.sequence += 1
+        code = f"CODE{self.sequence}"
+        self.patients.append(
+            {"user_id": user_id, "owner_id": None, "name": name, "connection_code": code}
+        )
+        return code
+
     async def get_patient_name(self, patient_id: str) -> str | None:
         patient = self.patients_by_id.get(patient_id)
         return patient.get("name") if patient else None
@@ -150,6 +158,35 @@ class AuthServiceTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(len(repository.patients), 1)
+
+    async def test_register_without_invite_code_creates_an_unowned_patient(self):
+        repository = _FakeAuthRepository()
+        service = AuthService(repository)
+
+        user = await service.register(
+            name="Sola Paciente",
+            email="sola@email.com",
+            password="secret123",
+        )
+
+        self.assertEqual(user.role, "patient")
+        self.assertEqual(len(repository.patients), 1)
+        self.assertIsNone(repository.patients[0]["owner_id"])
+        self.assertIsNotNone(repository.patients[0]["connection_code"])
+
+    async def test_register_with_blank_invite_code_behaves_like_no_code(self):
+        repository = _FakeAuthRepository()
+        service = AuthService(repository)
+
+        await service.register(
+            name="Sola Paciente",
+            email="sola2@email.com",
+            password="secret123",
+            invite_code="   ",
+        )
+
+        self.assertEqual(len(repository.patients), 1)
+        self.assertIsNone(repository.patients[0]["owner_id"])
 
     async def test_register_nutritionist_creates_a_nutritionist_user_without_invite_code(self):
         repository = _FakeAuthRepository()

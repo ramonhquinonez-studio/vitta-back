@@ -22,7 +22,7 @@ class AuthService:
         self._repository = repository
 
     async def register(
-        self, *, name: str, email: str, password: str, invite_code: str
+        self, *, name: str, email: str, password: str, invite_code: str | None = None
     ) -> AuthUser:
         normalized_email = self._normalize_email(email)
         normalized_name = (name or "").strip()
@@ -33,14 +33,20 @@ class AuthService:
         if existing is not None:
             raise FileExistsError("Email already registered")
 
-        invite = await self._repository.get_invite_code((invite_code or "").strip().upper())
-        if invite is None:
-            raise LookupError("Invalid invite code")
-        if invite.get("used_at") is not None:
-            raise LookupError("Invite code already used")
-        expires_at = invite.get("expires_at")
-        if expires_at is not None and expires_at < datetime.utcnow():
-            raise LookupError("Invite code expired")
+        # A blank/whitespace code is treated the same as "not provided" —
+        # self-registration (030-back-patient-self-registration) — rather
+        # than as an invalid-code error.
+        cleaned_code = (invite_code or "").strip().upper()
+        invite: dict | None = None
+        if cleaned_code:
+            invite = await self._repository.get_invite_code(cleaned_code)
+            if invite is None:
+                raise LookupError("Invalid invite code")
+            if invite.get("used_at") is not None:
+                raise LookupError("Invite code already used")
+            expires_at = invite.get("expires_at")
+            if expires_at is not None and expires_at < datetime.utcnow():
+                raise LookupError("Invite code expired")
 
         user = await self._repository.create_user(
             name=normalized_name,
@@ -49,24 +55,31 @@ class AuthService:
             role="patient",
         )
 
-        patient_id = invite.get("patient_id")
-        linked = False
-        if patient_id:
-            linked = await self._repository.link_user_to_patient(
-                user_id=user.id, patient_id=patient_id
+        if invite is not None:
+            patient_id = invite.get("patient_id")
+            linked = False
+            if patient_id:
+                linked = await self._repository.link_user_to_patient(
+                    user_id=user.id, patient_id=patient_id
+                )
+            if not linked:
+                # Either this was an unscoped invite (no patient_id at all), or
+                # the linked chart was claimed/removed between invite creation
+                # and redemption — either way, the new account still needs a
+                # patient record, not silently none at all.
+                await self._repository.create_patient_for_user(
+                    user_id=user.id,
+                    owner_id=invite["owner_id"],
+                    name=normalized_name,
+                )
+            await self._repository.consume_invite_code(invite["code"], user.id)
+        else:
+            # No nutritionist yet: create a self-owned chart with its own
+            # connection code, so a nutritionist can claim this patient later
+            # (`PatientsService.claim_patient`).
+            await self._repository.create_unowned_patient_for_user(
+                user_id=user.id, name=normalized_name
             )
-        if not linked:
-            # Either this was an unscoped invite (no patient_id at all), or
-            # the linked chart was claimed/removed between invite creation
-            # and redemption — either way, the new account still needs a
-            # patient record, not silently none at all.
-            await self._repository.create_patient_for_user(
-                user_id=user.id,
-                owner_id=invite["owner_id"],
-                name=normalized_name,
-            )
-
-        await self._repository.consume_invite_code(invite["code"], user.id)
         return user
 
     async def preview_invite_code(self, code: str) -> dict:

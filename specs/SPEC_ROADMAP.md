@@ -31,6 +31,7 @@
 - `027-back-consultations-foundation`
 - `028-back-patient-account-linking`
 - `029-back-invite-code-preview`
+- `030-back-patient-self-registration`
 
 ## Next Recommended Specs
 

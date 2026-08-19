@@ -75,3 +75,9 @@ class PatientsService:
             if patient.user_id is not None:
                 raise ValueError("Patient already has a linked account")
         return await self._repository.create_invite_code(owner_id, patient_id=patient_id)
+
+    async def claim_patient(self, owner_id: str, code: str) -> Patient:
+        patient = await self._repository.claim_patient(owner_id, code)
+        if patient is None:
+            raise LookupError("Invalid or already-claimed connection code")
+        return patient

@@ -25,5 +25,9 @@ class PatientOut(BaseModel):
     height_cm: Optional[float] = None
     allergies: Optional[List[str]] = None
     notes: Optional[str] = None
-    owner_id: str
+    # None means self-registered with no nutritionist yet.
+    owner_id: Optional[str] = None
     user_id: Optional[str] = None
+
+class ClaimPatientIn(BaseModel):
+    code: str = Field(..., min_length=4, max_length=40)

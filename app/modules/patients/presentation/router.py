@@ -8,7 +8,7 @@ from app.core.storage import save_upload
 from app.db.mongo import get_db
 from app.schemas.auth import InviteCodeOut
 from app.schemas.pagination import Page, PaginationParams
-from app.schemas.patients import PatientIn, PatientOut, PatientUpdate
+from app.schemas.patients import ClaimPatientIn, PatientIn, PatientOut, PatientUpdate
 
 from ..application.patients_service import PatientsService
 from ..domain.entities import Patient
@@ -82,6 +82,23 @@ async def create_invite_code(
     service: PatientsService = Depends(get_patients_service),
 ):
     return await service.create_invite_code(_owner_id(current))
+
+
+@router.post("/claim", response_model=PatientOut)
+async def claim_patient(
+    payload: ClaimPatientIn,
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+):
+    """The inverse direction of an invite code: a patient who self-registered
+    without a nutritionist (`030-back-patient-self-registration`) shares
+    their own connection code, and the nutritionist redeems it here to add
+    that patient to their roster."""
+    try:
+        patient = await service.claim_patient(_owner_id(current), payload.code)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _serialize(patient)
 
 
 @router.post("/{patient_id}/invite-code", response_model=InviteCodeOut, status_code=201)

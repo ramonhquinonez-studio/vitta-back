@@ -63,6 +63,10 @@ async def ensure_indexes() -> None:
     await db.invite_codes.create_index("code", unique=True)
     await db.invite_codes.create_index("owner_id")
 
+    # ---------- CONNECTION CODES (patient self-registration, no nutritionist yet) ----------
+    # Sparse: most patients never have this field once claimed/never self-registered.
+    await db.patients.create_index("connection_code", unique=True, sparse=True)
+
     # ---------- CONSULTATIONS ----------
     await db.consultations.create_index([("owner_id", 1), ("patient_id", 1), ("status", 1)])
     await db.consultations.create_index([("owner_id", 1), ("created_at", -1)])

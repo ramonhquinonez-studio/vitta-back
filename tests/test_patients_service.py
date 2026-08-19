@@ -13,6 +13,7 @@ class _FakePatientsRepository:
         self.plan_assignments: dict[str, list[dict]] = {}
         self.invite_sequence = 0
         self.last_invite_patient_id = "unset"
+        self.connection_codes: dict[str, str] = {}
 
     async def list_for_owner(self, owner_id, *, page, limit, query=None):
         items = [p for p in self.patients.values() if p.owner_id == owner_id]
@@ -88,6 +89,35 @@ class _FakePatientsRepository:
         self.invite_sequence += 1
         self.last_invite_patient_id = patient_id
         return {"code": f"CODE{self.invite_sequence}", "expires_at": None}
+
+    async def create_unclaimed(self, name, code):
+        patient = Patient(id=str(self.sequence), owner_id=None, name=name)
+        self.patients[patient.id] = patient
+        self.connection_codes[code] = patient.id
+        self.sequence += 1
+        return patient
+
+    async def claim_patient(self, owner_id, code):
+        patient_id = self.connection_codes.get(code)
+        if patient_id is None:
+            return None
+        patient = self.patients.get(patient_id)
+        if patient is None or patient.owner_id is not None:
+            return None
+        updated = Patient(
+            id=patient.id,
+            owner_id=owner_id,
+            name=patient.name,
+            age=patient.age,
+            sex=patient.sex,
+            height_cm=patient.height_cm,
+            allergies=patient.allergies,
+            notes=patient.notes,
+            user_id=patient.user_id,
+        )
+        self.patients[patient_id] = updated
+        del self.connection_codes[code]
+        return updated
 
 
 class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
@@ -214,3 +244,30 @@ class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(LookupError):
             await service.create_invite_code("owner-2", patient_id=patient.id)
+
+    async def test_claim_patient_links_the_owner_and_consumes_the_code(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_unclaimed("Sola Paciente", "SOLO2026")
+
+        claimed = await service.claim_patient("owner-1", "SOLO2026")
+
+        self.assertEqual(claimed.id, patient.id)
+        self.assertEqual(claimed.owner_id, "owner-1")
+        self.assertNotIn("SOLO2026", repository.connection_codes)
+
+    async def test_claim_patient_rejects_an_unknown_code(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+
+        with self.assertRaises(LookupError):
+            await service.claim_patient("owner-1", "NOPE0000")
+
+    async def test_claim_patient_rejects_a_code_already_claimed(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        await repository.create_unclaimed("Sola Paciente", "SOLO2026")
+        await service.claim_patient("owner-1", "SOLO2026")
+
+        with self.assertRaises(LookupError):
+            await service.claim_patient("owner-2", "SOLO2026")

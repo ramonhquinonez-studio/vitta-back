@@ -38,6 +38,12 @@ class AuthRepository(Protocol):
     async def link_user_to_patient(self, *, user_id: str, patient_id: str) -> bool:
         ...
 
+    async def create_unowned_patient_for_user(self, *, user_id: str, name: str) -> str:
+        """Self-registration with no nutritionist yet. Returns the generated
+        connection code for the patient to share so a nutritionist can claim
+        them later (`PatientsRepository.claim_patient`)."""
+        ...
+
     async def get_patient_name(self, patient_id: str) -> str | None:
         ...
 

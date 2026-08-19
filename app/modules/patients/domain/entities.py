@@ -4,8 +4,11 @@ from dataclasses import dataclass, field
 @dataclass(frozen=True)
 class Patient:
     id: str
-    owner_id: str
     name: str
+    # None means self-registered with no nutritionist yet (see
+    # `030-back-patient-self-registration`) — the patient shares their own
+    # connection code for a nutritionist to claim them later.
+    owner_id: str | None = None
     age: int | None = None
     sex: str | None = None
     height_cm: float | None = None

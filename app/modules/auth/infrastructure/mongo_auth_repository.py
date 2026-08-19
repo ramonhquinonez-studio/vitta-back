@@ -1,9 +1,17 @@
+import secrets
 from datetime import datetime
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.errors import DuplicateKeyError
 
 from ..domain.entities import AuthUser
+
+# Same alphabet/length as the nutritionist-issued invite codes
+# (`mongo_patients_repository.py`) — no ambiguous characters, easy to read
+# back from the patient sharing it out loud or by text.
+_CONNECTION_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+_CONNECTION_CODE_LENGTH = 8
 
 
 class MongoAuthRepository:
@@ -98,6 +106,31 @@ class MongoAuthRepository:
             {"$set": {"user_id": ObjectId(user_id)}},
         )
         return result.modified_count > 0
+
+    async def create_unowned_patient_for_user(self, *, user_id: str, name: str) -> str:
+        for _ in range(5):
+            code = "".join(
+                secrets.choice(_CONNECTION_CODE_ALPHABET)
+                for _ in range(_CONNECTION_CODE_LENGTH)
+            )
+            try:
+                await self._db.patients.insert_one(
+                    {
+                        "user_id": ObjectId(user_id),
+                        "owner_id": None,
+                        "name": name,
+                        "age": None,
+                        "sex": None,
+                        "height_cm": None,
+                        "allergies": [],
+                        "connection_code": code,
+                        "created_at": datetime.utcnow(),
+                    }
+                )
+                return code
+            except DuplicateKeyError:
+                continue
+        raise RuntimeError("Could not generate a unique connection code")
 
     async def get_patient_name(self, patient_id: str) -> str | None:
         if not ObjectId.is_valid(patient_id):

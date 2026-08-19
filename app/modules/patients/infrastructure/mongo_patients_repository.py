@@ -5,6 +5,7 @@ from typing import Any
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from ..domain.entities import Patient
@@ -199,10 +200,29 @@ class MongoPatientsRepository:
                 continue
         raise RuntimeError("Could not generate a unique invite code")
 
+    async def claim_patient(self, owner_id: str, code: str) -> Patient | None:
+        """Links an unclaimed, self-registered patient (owner_id is None) to
+        the calling nutritionist, matched by the connection code the patient
+        shared out-of-band. Mirrors `link_user_to_patient`'s null-guarded
+        `update_one` so two nutritionists racing on the same code can't both
+        "succeed"."""
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        normalized_code = (code or "").strip().upper()
+        if not normalized_code:
+            return None
+        document = await self._db.patients.find_one_and_update(
+            {"connection_code": normalized_code, "owner_id": None},
+            {"$set": {"owner_id": owner_oid}, "$unset": {"connection_code": ""}},
+            return_document=ReturnDocument.AFTER,
+        )
+        if document is None:
+            return None
+        return self._to_entity(document)
+
     def _to_entity(self, document: dict) -> Patient:
         return Patient(
             id=str(document["_id"]),
-            owner_id=str(document["owner_id"]),
+            owner_id=self._stringify_maybe_oid(document.get("owner_id")),
             name=document["name"],
             age=document.get("age"),
             sex=document.get("sex"),

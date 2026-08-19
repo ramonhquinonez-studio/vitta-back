@@ -40,3 +40,6 @@ class PatientsRepository(Protocol):
 
     async def create_invite_code(self, owner_id: str, patient_id: str | None = None) -> dict:
         ...
+
+    async def claim_patient(self, owner_id: str, code: str) -> Patient | None:
+        ...

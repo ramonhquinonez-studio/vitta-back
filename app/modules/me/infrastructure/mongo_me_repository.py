@@ -33,6 +33,9 @@ class MongoMeRepository:
             "height_cm": patient.get("height_cm"),
             "allergies": patient.get("allergies"),
             "owner_id": str(patient.get("owner_id")) if patient.get("owner_id") else None,
+            # Only present (non-null) while self-registered and unclaimed —
+            # cleared the moment a nutritionist redeems it.
+            "connection_code": patient.get("connection_code"),
         }
 
     async def update_patient_profile(self, patient_id: str, payload: dict) -> dict | None:
