@@ -321,6 +321,16 @@ class MeService:
             return []
         return await self._repository.list_recommendations(patient.get("owner_id"), kind=kind)
 
+    async def get_hydration(self, user_id: str) -> dict[str, Any]:
+        patient = await self._repository.get_patient_for_user(user_id)
+        if not patient:
+            return {"current_ml": 0, "target_ml": 2000}
+        return await self._repository.get_hydration_today(patient["id"])
+
+    async def add_hydration(self, user_id: str, delta_ml: int) -> dict[str, Any]:
+        patient = await self._require_patient(user_id)
+        return await self._repository.add_hydration(patient["id"], delta_ml=delta_ml)
+
     async def _require_patient(self, user_id: str) -> dict:
         patient = await self._repository.get_patient_for_user(user_id)
         if not patient:

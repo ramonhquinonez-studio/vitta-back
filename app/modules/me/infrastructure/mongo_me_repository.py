@@ -4,6 +4,8 @@ from typing import Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+_DEFAULT_HYDRATION_TARGET_ML = 2000
+
 
 class MongoMeRepository:
     def __init__(self, db: AsyncIOMotorDatabase):
@@ -441,6 +443,50 @@ class MongoMeRepository:
             }
             async for doc in cursor
         ]
+
+    async def get_hydration_today(self, patient_id: str) -> dict:
+        patient_oid = self._as_oid(patient_id)
+        date_key = datetime.utcnow().strftime("%Y-%m-%d")
+        doc = await self._db.hydration_logs.find_one(
+            {"patient_id": patient_oid, "date": date_key}
+        )
+        if doc is None:
+            return {"current_ml": 0, "target_ml": _DEFAULT_HYDRATION_TARGET_ML}
+        return {
+            "current_ml": doc.get("current_ml", 0),
+            "target_ml": doc.get("target_ml", _DEFAULT_HYDRATION_TARGET_ML),
+        }
+
+    async def add_hydration(self, patient_id: str, *, delta_ml: int) -> dict:
+        patient_oid = self._as_oid(patient_id)
+        date_key = datetime.utcnow().strftime("%Y-%m-%d")
+        existing = await self._db.hydration_logs.find_one(
+            {"patient_id": patient_oid, "date": date_key}
+        )
+        target_ml = (
+            existing.get("target_ml", _DEFAULT_HYDRATION_TARGET_ML)
+            if existing
+            else _DEFAULT_HYDRATION_TARGET_ML
+        )
+        current_ml = existing.get("current_ml", 0) if existing else 0
+        next_ml = max(0, min(target_ml, current_ml + delta_ml))
+        await self._db.hydration_logs.update_one(
+            {"patient_id": patient_oid, "date": date_key},
+            {
+                "$set": {
+                    "current_ml": next_ml,
+                    "target_ml": target_ml,
+                    "updated_at": datetime.utcnow(),
+                },
+                "$setOnInsert": {
+                    "patient_id": patient_oid,
+                    "date": date_key,
+                    "created_at": datetime.utcnow(),
+                },
+            },
+            upsert=True,
+        )
+        return {"current_ml": next_ml, "target_ml": target_ml}
 
     def _serialize_appointment(self, doc: dict) -> dict:
         return {

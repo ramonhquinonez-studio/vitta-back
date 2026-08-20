@@ -100,3 +100,9 @@ class MeRepository(Protocol):
         self, owner_id: str | None, *, kind: str | None = None
     ) -> list[dict]:
         ...
+
+    async def get_hydration_today(self, patient_id: str) -> dict:
+        ...
+
+    async def add_hydration(self, patient_id: str, *, delta_ml: int) -> dict:
+        ...

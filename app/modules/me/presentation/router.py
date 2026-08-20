@@ -184,6 +184,31 @@ async def add_measurement(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get("/hydration", response_model=dict)
+async def my_hydration(
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    return await service.get_hydration(_user_id(current))
+
+
+@router.post("/hydration", response_model=dict)
+async def add_my_hydration(
+    payload: dict[str, Any],
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    delta = payload.get("delta_ml")
+    if not isinstance(delta, int):
+        raise HTTPException(
+            status_code=400, detail="delta_ml is required and must be an integer"
+        )
+    try:
+        return await service.add_hydration(_user_id(current), delta)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.get("/progress", response_model=dict)
 async def my_progress(
     current=Depends(get_current_user),

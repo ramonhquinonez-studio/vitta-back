@@ -18,6 +18,7 @@ class _FakeMeRepository:
         self.body_compositions_by_id = {}
         self.food_diary_entries = []
         self.created_food_diary_entry = None
+        self.hydration = {"current_ml": 0, "target_ml": 2000}
 
     async def get_user(self, user_id):
         return {"id": user_id, "email": "maria@email.com", "name": "Maria"}
@@ -121,6 +122,15 @@ class _FakeMeRepository:
 
     async def get_plan_summary(self, plan_id):
         return self.plans_by_id.get(plan_id)
+
+    async def get_hydration_today(self, patient_id):
+        return self.hydration
+
+    async def add_hydration(self, patient_id, *, delta_ml):
+        target = self.hydration["target_ml"]
+        next_ml = max(0, min(target, self.hydration["current_ml"] + delta_ml))
+        self.hydration = {"current_ml": next_ml, "target_ml": target}
+        return self.hydration
 
 
 class MeServiceTest(unittest.IsolatedAsyncioTestCase):
@@ -292,3 +302,31 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
         result = await service.list_recommendations("user-1")
 
         self.assertEqual(result, [])
+
+    async def test_add_hydration_clamps_between_zero_and_target(self):
+        repository = _FakeMeRepository()
+        repository.hydration = {"current_ml": 100, "target_ml": 2000}
+        service = MeService(repository)
+
+        result = await service.add_hydration("user-1", -500)
+        self.assertEqual(result["current_ml"], 0)
+
+        result = await service.add_hydration("user-1", 5000)
+        self.assertEqual(result["current_ml"], 2000)
+
+    async def test_get_hydration_returns_default_for_user_without_patient(self):
+        repository = _FakeMeRepository()
+        repository.patient = None
+        service = MeService(repository)
+
+        result = await service.get_hydration("user-1")
+
+        self.assertEqual(result, {"current_ml": 0, "target_ml": 2000})
+
+    async def test_add_hydration_requires_a_linked_patient(self):
+        repository = _FakeMeRepository()
+        repository.patient = None
+        service = MeService(repository)
+
+        with self.assertRaises(LookupError):
+            await service.add_hydration("user-1", 250)
