@@ -32,6 +32,7 @@
 - `028-back-patient-account-linking`
 - `029-back-invite-code-preview`
 - `030-back-patient-self-registration`
+- `031-back-hydration-tracking`
 
 ## Next Recommended Specs
 
