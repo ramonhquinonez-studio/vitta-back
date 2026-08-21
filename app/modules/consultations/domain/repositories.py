@@ -29,10 +29,28 @@ class ConsultationsRepository(Protocol):
     ) -> Consultation | None:
         ...
 
+    async def update_requirement_for_owner(
+        self, owner_id: str, consultation_id: str, updates: dict
+    ) -> Consultation | None:
+        ...
+
+    async def update_distribution_for_owner(
+        self, owner_id: str, consultation_id: str, updates: dict
+    ) -> Consultation | None:
+        ...
+
+    async def update_menu_for_owner(
+        self, owner_id: str, consultation_id: str, allocations: list[dict]
+    ) -> Consultation | None:
+        ...
+
     async def update_close_for_owner(
         self, owner_id: str, consultation_id: str, updates: dict
     ) -> Consultation | None:
         ...
 
     async def complete_for_owner(self, owner_id: str, consultation_id: str) -> Consultation | None:
+        ...
+
+    async def reopen_for_owner(self, owner_id: str, consultation_id: str) -> Consultation | None:
         ...

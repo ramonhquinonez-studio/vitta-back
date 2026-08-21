@@ -87,6 +87,78 @@ class ConsultationsService:
             raise LookupError("Consultation not found")
         return updated
 
+    async def update_requirement(
+        self,
+        owner_id: str,
+        consultation_id: str,
+        *,
+        wrist_cm: float | None,
+        activity_factor: float | None,
+        calorie_adjustment: float | None,
+    ) -> Consultation:
+        updates = {
+            key: value
+            for key, value in {
+                "wrist_cm": wrist_cm,
+                "activity_factor": activity_factor,
+                "calorie_adjustment": calorie_adjustment,
+            }.items()
+            if value is not None
+        }
+        if not updates:
+            raise ValueError("No fields to update")
+
+        updated = await self._repository.update_requirement_for_owner(
+            owner_id, consultation_id, updates
+        )
+        if updated is None:
+            raise LookupError("Consultation not found")
+        return updated
+
+    async def update_distribution(
+        self,
+        owner_id: str,
+        consultation_id: str,
+        *,
+        target_kcal: float | None,
+        carbs_pct: float | None,
+        protein_pct: float | None,
+        fat_pct: float | None,
+    ) -> Consultation:
+        updates = {
+            key: value
+            for key, value in {
+                "target_kcal": target_kcal,
+                "carbs_pct": carbs_pct,
+                "protein_pct": protein_pct,
+                "fat_pct": fat_pct,
+            }.items()
+            if value is not None
+        }
+        if not updates:
+            raise ValueError("No fields to update")
+
+        updated = await self._repository.update_distribution_for_owner(
+            owner_id, consultation_id, updates
+        )
+        if updated is None:
+            raise LookupError("Consultation not found")
+        return updated
+
+    async def update_menu(
+        self,
+        owner_id: str,
+        consultation_id: str,
+        *,
+        allocations: list[dict],
+    ) -> Consultation:
+        updated = await self._repository.update_menu_for_owner(
+            owner_id, consultation_id, allocations
+        )
+        if updated is None:
+            raise LookupError("Consultation not found")
+        return updated
+
     async def update_close(
         self,
         owner_id: str,
@@ -121,6 +193,18 @@ class ConsultationsService:
             raise ValueError("Consultation already completed")
 
         updated = await self._repository.complete_for_owner(owner_id, consultation_id)
+        if updated is None:
+            raise LookupError("Consultation not found")
+        return updated
+
+    async def reopen(self, owner_id: str, consultation_id: str) -> Consultation:
+        current = await self._repository.get_for_owner(owner_id, consultation_id)
+        if current is None:
+            raise LookupError("Consultation not found")
+        if current.status != "completed":
+            raise ValueError("Consultation is not completed")
+
+        updated = await self._repository.reopen_for_owner(owner_id, consultation_id)
         if updated is None:
             raise LookupError("Consultation not found")
         return updated

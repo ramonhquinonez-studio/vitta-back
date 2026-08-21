@@ -34,7 +34,8 @@
 - `030-back-patient-self-registration`
 - `031-back-hydration-tracking`
 - `032-back-content-library`
+- `033-back-consultation-requirement-menu`
 
 ## Next Recommended Specs
 
-- Consultation requirement/macro calculation + per-meal distribution (Phase 2 of the "Consultation as one continuous session" redesign) — needs `027-back-consultations-foundation` and the existing `nutritionist_profile` workflow defaults/`equivalencies` catalog, both already in place.
+No hay specs pendientes en el roadmap base.

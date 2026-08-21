@@ -3,7 +3,13 @@ from dataclasses import replace
 from datetime import datetime
 
 from app.modules.consultations.application.consultations_service import ConsultationsService
-from app.modules.consultations.domain.entities import Consultation, EvaluationSnapshot
+from app.modules.consultations.domain.entities import (
+    Consultation,
+    DistributionInput,
+    EvaluationSnapshot,
+    MenuAllocationItem,
+    RequirementInput,
+)
 
 
 class _FakeConsultationsRepository:
@@ -56,6 +62,26 @@ class _FakeConsultationsRepository:
         merged = replace(existing, **updates)
         return await self.update_for_owner(owner_id, consultation_id, {"evaluation": merged})
 
+    async def update_requirement_for_owner(self, owner_id, consultation_id, updates):
+        current = await self.get_for_owner(owner_id, consultation_id)
+        if current is None:
+            return None
+        existing = current.requirement or RequirementInput()
+        merged = replace(existing, **updates)
+        return await self.update_for_owner(owner_id, consultation_id, {"requirement": merged})
+
+    async def update_distribution_for_owner(self, owner_id, consultation_id, updates):
+        current = await self.get_for_owner(owner_id, consultation_id)
+        if current is None:
+            return None
+        existing = current.distribution or DistributionInput()
+        merged = replace(existing, **updates)
+        return await self.update_for_owner(owner_id, consultation_id, {"distribution": merged})
+
+    async def update_menu_for_owner(self, owner_id, consultation_id, allocations):
+        items = [MenuAllocationItem(**item) for item in allocations]
+        return await self.update_for_owner(owner_id, consultation_id, {"menu_allocations": items})
+
     async def update_close_for_owner(self, owner_id, consultation_id, updates):
         return await self.update_for_owner(owner_id, consultation_id, updates)
 
@@ -64,6 +90,13 @@ class _FakeConsultationsRepository:
             owner_id,
             consultation_id,
             {"status": "completed", "completed_at": datetime(2026, 1, 1)},
+        )
+
+    async def reopen_for_owner(self, owner_id, consultation_id):
+        return await self.update_for_owner(
+            owner_id,
+            consultation_id,
+            {"status": "draft", "completed_at": None},
         )
 
 
@@ -146,6 +179,116 @@ class ConsultationsServiceTest(unittest.IsolatedAsyncioTestCase):
                 notes=None,
             )
 
+    async def test_update_requirement_merges_only_provided_fields(self):
+        repository = _FakeConsultationsRepository()
+        service = ConsultationsService(repository)
+        consultation = await service.start("owner-1", patient_id="patient-1", appointment_id=None)
+        await service.update_requirement(
+            "owner-1",
+            consultation.id,
+            wrist_cm=16.5,
+            activity_factor=None,
+            calorie_adjustment=None,
+        )
+
+        updated = await service.update_requirement(
+            "owner-1",
+            consultation.id,
+            wrist_cm=None,
+            activity_factor=1.3,
+            calorie_adjustment=None,
+        )
+
+        self.assertEqual(updated.requirement.wrist_cm, 16.5)
+        self.assertEqual(updated.requirement.activity_factor, 1.3)
+
+    async def test_update_requirement_rejects_an_empty_payload(self):
+        repository = _FakeConsultationsRepository()
+        service = ConsultationsService(repository)
+        consultation = await service.start("owner-1", patient_id="patient-1", appointment_id=None)
+
+        with self.assertRaises(ValueError):
+            await service.update_requirement(
+                "owner-1",
+                consultation.id,
+                wrist_cm=None,
+                activity_factor=None,
+                calorie_adjustment=None,
+            )
+
+    async def test_update_distribution_merges_only_provided_fields(self):
+        repository = _FakeConsultationsRepository()
+        service = ConsultationsService(repository)
+        consultation = await service.start("owner-1", patient_id="patient-1", appointment_id=None)
+        await service.update_distribution(
+            "owner-1",
+            consultation.id,
+            target_kcal=1800,
+            carbs_pct=None,
+            protein_pct=None,
+            fat_pct=None,
+        )
+
+        updated = await service.update_distribution(
+            "owner-1",
+            consultation.id,
+            target_kcal=None,
+            carbs_pct=50,
+            protein_pct=None,
+            fat_pct=None,
+        )
+
+        self.assertEqual(updated.distribution.target_kcal, 1800)
+        self.assertEqual(updated.distribution.carbs_pct, 50)
+
+    async def test_update_distribution_rejects_an_empty_payload(self):
+        repository = _FakeConsultationsRepository()
+        service = ConsultationsService(repository)
+        consultation = await service.start("owner-1", patient_id="patient-1", appointment_id=None)
+
+        with self.assertRaises(ValueError):
+            await service.update_distribution(
+                "owner-1",
+                consultation.id,
+                target_kcal=None,
+                carbs_pct=None,
+                protein_pct=None,
+                fat_pct=None,
+            )
+
+    async def test_update_menu_replaces_the_full_allocation_list(self):
+        repository = _FakeConsultationsRepository()
+        service = ConsultationsService(repository)
+        consultation = await service.start("owner-1", patient_id="patient-1", appointment_id=None)
+        await service.update_menu(
+            "owner-1",
+            consultation.id,
+            allocations=[{"group_id": "verduras", "units": 2}],
+        )
+
+        updated = await service.update_menu(
+            "owner-1",
+            consultation.id,
+            allocations=[{"group_id": "verduras", "units": 3}, {"group_id": "frutas", "units": 2}],
+        )
+
+        self.assertEqual(len(updated.menu_allocations), 2)
+        self.assertEqual(updated.menu_allocations[0].units, 3)
+
+    async def test_update_menu_accepts_an_empty_list_to_clear_allocations(self):
+        repository = _FakeConsultationsRepository()
+        service = ConsultationsService(repository)
+        consultation = await service.start("owner-1", patient_id="patient-1", appointment_id=None)
+        await service.update_menu(
+            "owner-1",
+            consultation.id,
+            allocations=[{"group_id": "verduras", "units": 2}],
+        )
+
+        updated = await service.update_menu("owner-1", consultation.id, allocations=[])
+
+        self.assertEqual(updated.menu_allocations, [])
+
     async def test_update_close_saves_private_notes_and_next_appointment(self):
         repository = _FakeConsultationsRepository()
         service = ConsultationsService(repository)
@@ -179,6 +322,25 @@ class ConsultationsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(ValueError):
             await service.complete("owner-1", consultation.id)
+
+    async def test_reopen_returns_a_completed_consultation_to_draft(self):
+        repository = _FakeConsultationsRepository()
+        service = ConsultationsService(repository)
+        consultation = await service.start("owner-1", patient_id="patient-1", appointment_id=None)
+        await service.complete("owner-1", consultation.id)
+
+        reopened = await service.reopen("owner-1", consultation.id)
+
+        self.assertEqual(reopened.status, "draft")
+        self.assertIsNone(reopened.completed_at)
+
+    async def test_reopen_rejects_a_consultation_that_is_not_completed(self):
+        repository = _FakeConsultationsRepository()
+        service = ConsultationsService(repository)
+        consultation = await service.start("owner-1", patient_id="patient-1", appointment_id=None)
+
+        with self.assertRaises(ValueError):
+            await service.reopen("owner-1", consultation.id)
 
     async def test_get_consultation_raises_when_not_found(self):
         service = ConsultationsService(_FakeConsultationsRepository())

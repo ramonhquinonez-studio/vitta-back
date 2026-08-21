@@ -4,7 +4,13 @@ from datetime import datetime
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from ..domain.entities import Consultation, EvaluationSnapshot
+from ..domain.entities import (
+    Consultation,
+    DistributionInput,
+    EvaluationSnapshot,
+    MenuAllocationItem,
+    RequirementInput,
+)
 
 
 class MongoConsultationsRepository:
@@ -39,6 +45,9 @@ class MongoConsultationsRepository:
             "current_step": 1,
             "visit_type": None,
             "evaluation": None,
+            "requirement": None,
+            "distribution": None,
+            "menu_allocations": None,
             "private_notes": None,
             "next_appointment_id": None,
             "completed_at": None,
@@ -94,6 +103,35 @@ class MongoConsultationsRepository:
         merged = {**existing, **updates}
         return await self.update_for_owner(owner_id, consultation_id, {"evaluation": merged})
 
+    async def update_requirement_for_owner(
+        self, owner_id: str, consultation_id: str, updates: dict
+    ) -> Consultation | None:
+        current = await self.get_for_owner(owner_id, consultation_id)
+        if current is None:
+            return None
+        existing = asdict(current.requirement) if current.requirement else asdict(RequirementInput())
+        merged = {**existing, **updates}
+        return await self.update_for_owner(owner_id, consultation_id, {"requirement": merged})
+
+    async def update_distribution_for_owner(
+        self, owner_id: str, consultation_id: str, updates: dict
+    ) -> Consultation | None:
+        current = await self.get_for_owner(owner_id, consultation_id)
+        if current is None:
+            return None
+        existing = (
+            asdict(current.distribution) if current.distribution else asdict(DistributionInput())
+        )
+        merged = {**existing, **updates}
+        return await self.update_for_owner(owner_id, consultation_id, {"distribution": merged})
+
+    async def update_menu_for_owner(
+        self, owner_id: str, consultation_id: str, allocations: list[dict]
+    ) -> Consultation | None:
+        return await self.update_for_owner(
+            owner_id, consultation_id, {"menu_allocations": allocations}
+        )
+
     async def update_close_for_owner(
         self, owner_id: str, consultation_id: str, updates: dict
     ) -> Consultation | None:
@@ -106,9 +144,26 @@ class MongoConsultationsRepository:
             {"status": "completed", "completed_at": datetime.utcnow()},
         )
 
+    async def reopen_for_owner(self, owner_id: str, consultation_id: str) -> Consultation | None:
+        return await self.update_for_owner(
+            owner_id,
+            consultation_id,
+            {"status": "draft", "completed_at": None},
+        )
+
     def _to_entity(self, doc: dict) -> Consultation:
         evaluation_doc = doc.get("evaluation")
         evaluation = EvaluationSnapshot(**evaluation_doc) if evaluation_doc else None
+        requirement_doc = doc.get("requirement")
+        requirement = RequirementInput(**requirement_doc) if requirement_doc else None
+        distribution_doc = doc.get("distribution")
+        distribution = DistributionInput(**distribution_doc) if distribution_doc else None
+        menu_allocations_docs = doc.get("menu_allocations")
+        menu_allocations = (
+            [MenuAllocationItem(**item) for item in menu_allocations_docs]
+            if menu_allocations_docs is not None
+            else None
+        )
         return Consultation(
             id=str(doc["_id"]),
             owner_id=self._stringify_maybe_oid(doc.get("owner_id")) or "",
@@ -118,6 +173,9 @@ class MongoConsultationsRepository:
             current_step=doc.get("current_step", 1),
             visit_type=doc.get("visit_type"),
             evaluation=evaluation,
+            requirement=requirement,
+            distribution=distribution,
+            menu_allocations=menu_allocations,
             private_notes=doc.get("private_notes"),
             next_appointment_id=self._stringify_maybe_oid(doc.get("next_appointment_id")),
             completed_at=doc.get("completed_at"),
