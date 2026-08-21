@@ -28,6 +28,7 @@ from app.routers import (
     recommendations as recommendations_router,
     equivalencies as equivalencies_router,
     consultations as consultations_router,
+    content_library as content_library_router,
 )
 
 @asynccontextmanager
@@ -78,6 +79,7 @@ app.include_router(recipes_router.router, tags=["recipes"])
 app.include_router(recommendations_router.router, tags=["recommendations"])
 app.include_router(equivalencies_router.router, tags=["equivalencies"])
 app.include_router(consultations_router.router, tags=["consultations"])
+app.include_router(content_library_router.router, tags=["content_library"])
 
 os.makedirs(settings.UPLOADS_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.UPLOADS_DIR), name="uploads")
