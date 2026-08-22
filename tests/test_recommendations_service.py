@@ -104,6 +104,36 @@ class RecommendationsServiceTest(unittest.IsolatedAsyncioTestCase):
         await service.delete_recommendation("owner-1", created.id)
         self.assertEqual(await service.list_my_recommendations("owner-1"), [])
 
+    async def test_create_bulk_creates_every_item(self):
+        repository = _FakeRecommendationsRepository()
+        service = RecommendationsService(repository)
+
+        created = await service.create_bulk(
+            "owner-1",
+            [
+                {"kind": "supplement", "title": "Omega 3"},
+                {"kind": "brand", "title": "NOW Foods"},
+            ],
+        )
+
+        self.assertEqual(len(created), 2)
+        self.assertEqual(await service.list_my_recommendations("owner-1"), created)
+
+    async def test_create_bulk_rejects_the_whole_batch_if_one_item_is_invalid(self):
+        repository = _FakeRecommendationsRepository()
+        service = RecommendationsService(repository)
+
+        with self.assertRaises(ValueError):
+            await service.create_bulk(
+                "owner-1",
+                [
+                    {"kind": "supplement", "title": "Omega 3"},
+                    {"kind": "supplement"},  # missing title
+                ],
+            )
+
+        self.assertEqual(await service.list_my_recommendations("owner-1"), [])
+
     async def test_update_rejects_a_recommendation_not_owned(self):
         repository = _FakeRecommendationsRepository()
         service = RecommendationsService(repository)

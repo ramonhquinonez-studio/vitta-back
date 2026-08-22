@@ -4,6 +4,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.core.deps import get_current_user
 from app.db.mongo import get_db
 from app.schemas.recommendations import (
+    RecommendationBulkCreate,
     RecommendationCreate,
     RecommendationOut,
     RecommendationUpdate,
@@ -69,6 +70,21 @@ async def create_recommendation(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _serialize(rec)
+
+
+@router.post("/bulk", response_model=list[RecommendationOut], status_code=201)
+async def create_recommendations_bulk(
+    payload: RecommendationBulkCreate,
+    current=Depends(get_current_user),
+    service: RecommendationsService = Depends(get_recommendations_service),
+):
+    try:
+        items = await service.create_bulk(
+            _owner_id(current), [item.model_dump() for item in payload.items]
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return [_serialize(r) for r in items]
 
 
 @router.patch("/{recommendation_id}", response_model=RecommendationOut)

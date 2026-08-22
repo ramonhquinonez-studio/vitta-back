@@ -14,11 +14,22 @@ class RecommendationsService:
         return await self._repository.list_for_owner(owner_id, kind=kind)
 
     async def create_recommendation(self, owner_id: str, payload: dict) -> Recommendation:
+        self._validate(payload)
+        return await self._repository.create_for_owner(owner_id, payload)
+
+    async def create_bulk(self, owner_id: str, items: list[dict]) -> list[Recommendation]:
+        # Validate every item before creating any of them, so a bad row
+        # partway through a long pasted list doesn't leave the catalog
+        # half-imported.
+        for payload in items:
+            self._validate(payload)
+        return [await self._repository.create_for_owner(owner_id, payload) for payload in items]
+
+    def _validate(self, payload: dict) -> None:
         if not payload.get("title"):
             raise ValueError("title is required")
         if payload.get("kind") not in _VALID_KINDS:
             raise ValueError("kind must be 'supplement' or 'brand'")
-        return await self._repository.create_for_owner(owner_id, payload)
 
     async def update_recommendation(
         self, owner_id: str, recommendation_id: str, payload: dict

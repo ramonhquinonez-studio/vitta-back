@@ -33,6 +33,10 @@ class RecommendationCreate(BaseModel):
     emoji: Optional[str] = Field(None, max_length=8)
 
 
+class RecommendationBulkCreate(BaseModel):
+    items: List[RecommendationCreate] = Field(..., min_length=1, max_length=200)
+
+
 class RecommendationUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=120)
     subtitle: Optional[str] = Field(None, max_length=120)
