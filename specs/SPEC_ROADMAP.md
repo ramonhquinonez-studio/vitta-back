@@ -35,6 +35,8 @@
 - `031-back-hydration-tracking`
 - `032-back-content-library`
 - `033-back-consultation-requirement-menu`
+- `034-back-nutritionist-content-library`
+- `035-back-plan-meal-dish-name`
 
 ## Next Recommended Specs
 
