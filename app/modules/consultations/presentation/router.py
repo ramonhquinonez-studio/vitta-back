@@ -18,6 +18,10 @@ from app.schemas.consultation import (
     RequirementInputOut,
 )
 
+from app.modules.appointments.infrastructure.mongo_appointments_repository import (
+    MongoAppointmentsRepository,
+)
+
 from ..application.consultations_service import ConsultationsService
 from ..domain.entities import Consultation
 from ..infrastructure.mongo_consultations_repository import MongoConsultationsRepository
@@ -28,7 +32,10 @@ router = APIRouter(prefix="/consultations", tags=["consultations"])
 def get_consultations_service(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> ConsultationsService:
-    return ConsultationsService(MongoConsultationsRepository(db))
+    return ConsultationsService(
+        MongoConsultationsRepository(db),
+        appointments_repository=MongoAppointmentsRepository(db),
+    )
 
 
 def _owner_id(current) -> str:

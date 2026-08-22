@@ -22,7 +22,7 @@ class AppointmentCreate(BaseModel):
     start: datetime
     end: datetime | None = None
     mode: Literal["online", "onsite"]
-    status: Literal["confirmed", "pending", "canceled"] = "pending"
+    status: Literal["confirmed", "pending", "canceled", "completed"] = "pending"
     note: str | None = None
     plan_id: str | None = Field(default=None, validation_alias="planId")
     body_composition_id: str | None = Field(
@@ -37,7 +37,7 @@ class AppointmentUpdate(BaseModel):
     start: datetime | None = None
     end: datetime | None = None
     mode: Literal["online", "onsite"] | None = None
-    status: Literal["confirmed", "pending", "canceled"] | None = None
+    status: Literal["confirmed", "pending", "canceled", "completed"] | None = None
     note: str | None = None
     plan_id: str | None = Field(default=None, validation_alias="planId")
     body_composition_id: str | None = Field(

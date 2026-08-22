@@ -100,6 +100,15 @@ class _FakeConsultationsRepository:
         )
 
 
+class _FakeAppointmentsRepository:
+    def __init__(self):
+        self.statuses: dict[str, str] = {}
+
+    async def update_for_owner(self, owner_id, appointment_id, updates):
+        self.statuses[appointment_id] = updates["status"]
+        return None
+
+
 class ConsultationsServiceTest(unittest.IsolatedAsyncioTestCase):
     async def test_start_creates_a_new_draft_when_none_exists(self):
         service = ConsultationsService(_FakeConsultationsRepository())
@@ -341,6 +350,41 @@ class ConsultationsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(ValueError):
             await service.reopen("owner-1", consultation.id)
+
+    async def test_complete_marks_the_linked_appointment_completed(self):
+        repository = _FakeConsultationsRepository()
+        appointments = _FakeAppointmentsRepository()
+        service = ConsultationsService(repository, appointments_repository=appointments)
+        consultation = await service.start(
+            "owner-1", patient_id="patient-1", appointment_id="appt-1"
+        )
+
+        await service.complete("owner-1", consultation.id)
+
+        self.assertEqual(appointments.statuses["appt-1"], "completed")
+
+    async def test_reopen_returns_the_linked_appointment_to_confirmed(self):
+        repository = _FakeConsultationsRepository()
+        appointments = _FakeAppointmentsRepository()
+        service = ConsultationsService(repository, appointments_repository=appointments)
+        consultation = await service.start(
+            "owner-1", patient_id="patient-1", appointment_id="appt-1"
+        )
+        await service.complete("owner-1", consultation.id)
+
+        await service.reopen("owner-1", consultation.id)
+
+        self.assertEqual(appointments.statuses["appt-1"], "confirmed")
+
+    async def test_complete_without_a_linked_appointment_does_not_touch_appointments(self):
+        repository = _FakeConsultationsRepository()
+        appointments = _FakeAppointmentsRepository()
+        service = ConsultationsService(repository, appointments_repository=appointments)
+        consultation = await service.start("owner-1", patient_id="patient-1", appointment_id=None)
+
+        await service.complete("owner-1", consultation.id)
+
+        self.assertEqual(appointments.statuses, {})
 
     async def test_get_consultation_raises_when_not_found(self):
         service = ConsultationsService(_FakeConsultationsRepository())

@@ -3,8 +3,12 @@ from ..domain.repositories import ConsultationsRepository
 
 
 class ConsultationsService:
-    def __init__(self, repository: ConsultationsRepository):
+    def __init__(self, repository: ConsultationsRepository, appointments_repository=None):
         self._repository = repository
+        # Optional: keeps the linked appointment's status in sync with the
+        # consultation's own status. None in contexts (tests) that don't
+        # care about that side effect.
+        self._appointments_repository = appointments_repository
 
     async def start(
         self, owner_id: str, *, patient_id: str, appointment_id: str | None
@@ -195,6 +199,7 @@ class ConsultationsService:
         updated = await self._repository.complete_for_owner(owner_id, consultation_id)
         if updated is None:
             raise LookupError("Consultation not found")
+        await self._sync_appointment_status(owner_id, updated.appointment_id, "completed")
         return updated
 
     async def reopen(self, owner_id: str, consultation_id: str) -> Consultation:
@@ -207,4 +212,19 @@ class ConsultationsService:
         updated = await self._repository.reopen_for_owner(owner_id, consultation_id)
         if updated is None:
             raise LookupError("Consultation not found")
+        await self._sync_appointment_status(owner_id, updated.appointment_id, "confirmed")
         return updated
+
+    async def _sync_appointment_status(
+        self, owner_id: str, appointment_id: str | None, status: str
+    ) -> None:
+        if not appointment_id or self._appointments_repository is None:
+            return
+        try:
+            await self._appointments_repository.update_for_owner(
+                owner_id, appointment_id, {"status": status}
+            )
+        except Exception:
+            # Mirrors the Google Calendar sync posture elsewhere: never let a
+            # side-effect update block the consultation's own status change.
+            pass
