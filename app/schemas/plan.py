@@ -19,6 +19,7 @@ class EatingOutOption(BaseModel):
 
 class PlanMeal(BaseModel):
     title: str
+    dish_name: Optional[str] = None
     time: Optional[str] = None
     items: List[PlanMealItem] = Field(default_factory=list)
     eating_out_options: List[EatingOutOption] = Field(default_factory=list)
