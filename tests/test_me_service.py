@@ -77,6 +77,12 @@ class _FakeMeRepository:
     async def list_education_videos(self, owner_id):
         return []
 
+    async def list_articles(self, owner_id):
+        platform = [{"id": "platform-1", "title": "Macronutrientes", "owner_id": None}]
+        if not owner_id:
+            return platform
+        return platform + [{"id": "mine-1", "title": "Mi consejo", "owner_id": owner_id}]
+
     async def get_nutritionist_profile(self, owner_id):
         if not owner_id:
             return None
@@ -330,3 +336,20 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(LookupError):
             await service.add_hydration("user-1", 250)
+
+    async def test_list_articles_merges_platform_and_the_patients_own_nutritionist(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+
+        result = await service.list_articles("user-1")
+
+        self.assertEqual([a["id"] for a in result], ["platform-1", "mine-1"])
+
+    async def test_list_articles_returns_only_platform_content_without_a_linked_patient(self):
+        repository = _FakeMeRepository()
+        repository.patient = None
+        service = MeService(repository)
+
+        result = await service.list_articles("user-1")
+
+        self.assertEqual([a["id"] for a in result], ["platform-1"])

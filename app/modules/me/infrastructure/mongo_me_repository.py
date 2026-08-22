@@ -288,6 +288,30 @@ class MongoMeRepository:
             async for doc in cursor
         ]
 
+    async def list_articles(self, owner_id: str | None) -> list[dict]:
+        platform_cursor = self._db.content_articles.find({"owner_id": None}).sort("order", 1)
+        platform = [self._article_dict(doc) async for doc in platform_cursor]
+        if not owner_id:
+            return platform
+        mine_cursor = self._db.content_articles.find(
+            {"owner_id": self._as_oid(owner_id)}
+        ).sort("updated_at", -1)
+        mine = [self._article_dict(doc) async for doc in mine_cursor]
+        return platform + mine
+
+    def _article_dict(self, document: dict) -> dict:
+        return {
+            "id": str(document["_id"]),
+            "category": document.get("category") or "",
+            "title": document.get("title"),
+            "description": document.get("description") or "",
+            "read_time": document.get("read_time") or "",
+            "emoji": document.get("emoji") or "📖",
+            "sections": document.get("sections") or [],
+            "owner_id": str(document["owner_id"]) if document.get("owner_id") else None,
+            "video_url": document.get("video_url"),
+        }
+
     async def get_nutritionist_profile(self, owner_id: str | None) -> dict | None:
         if not owner_id:
             return None

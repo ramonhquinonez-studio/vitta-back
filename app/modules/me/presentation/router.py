@@ -269,6 +269,17 @@ async def my_body_compositions(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get("/articles", response_model=list[dict])
+async def my_articles(
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    try:
+        return await service.list_articles(_user_id(current))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/education_videos", response_model=list[dict])
 async def my_education_videos(
     current=Depends(get_current_user),

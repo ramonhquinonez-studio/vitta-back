@@ -18,3 +18,5 @@ class Article:
     emoji: str
     order: int
     sections: list[ArticleSection]
+    owner_id: str | None = None
+    video_url: str | None = None

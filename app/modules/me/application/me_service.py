@@ -268,6 +268,14 @@ class MeService:
             return []
         return await self._repository.list_education_videos(patient.get("owner_id"))
 
+    async def list_articles(self, user_id: str) -> list[dict]:
+        # Unlike recipe_collections/education_videos, platform-curated
+        # articles (owner_id None) should still show even for a patient
+        # with no assigned nutritionist — so no early return on `not patient`.
+        patient = await self._repository.get_patient_for_user(user_id)
+        owner_id = patient.get("owner_id") if patient else None
+        return await self._repository.list_articles(owner_id)
+
     async def get_nutritionist_profile(self, user_id: str) -> dict | None:
         patient = await self._repository.get_patient_for_user(user_id)
         if not patient:
