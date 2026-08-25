@@ -337,7 +337,104 @@ class MeService:
 
     async def add_hydration(self, user_id: str, delta_ml: int) -> dict[str, Any]:
         patient = await self._require_patient(user_id)
-        return await self._repository.add_hydration(patient["id"], delta_ml=delta_ml)
+        return await self._repository.add_hydration(
+            patient["id"], patient.get("owner_id"), delta_ml=delta_ml
+        )
+
+    async def list_messages(self, user_id: str, *, since: datetime | None = None) -> list[dict]:
+        patient = await self._repository.get_patient_for_user(user_id)
+        if not patient:
+            return []
+        return await self._repository.list_messages(patient.get("owner_id"), patient["id"], since=since)
+
+    async def get_my_patient_record(self, user_id: str) -> dict | None:
+        """Exposed so the router can look up the owner/patient ids it needs
+        to push-notify the nutritionist after a successful send, without
+        reaching into the service's repository directly."""
+        return await self._repository.get_patient_for_user(user_id)
+
+    async def send_message(self, user_id: str, text: str) -> dict:
+        text = (text or "").strip()
+        if not text:
+            raise ValueError("text is required")
+        patient = await self._require_patient(user_id)
+        if not patient.get("owner_id"):
+            raise LookupError("No tienes un nutriólogo asignado todavía")
+        return await self._repository.create_message(patient.get("owner_id"), patient["id"], text=text)
+
+    async def list_checkin_templates(self, user_id: str) -> list[dict]:
+        patient = await self._repository.get_patient_for_user(user_id)
+        if not patient or not patient.get("owner_id"):
+            return []
+        return await self._repository.list_checkin_templates(patient["owner_id"])
+
+    async def submit_checkin_response(self, user_id: str, payload: dict) -> dict:
+        patient = await self._require_patient(user_id)
+        owner_id = patient.get("owner_id")
+        if not owner_id:
+            raise LookupError("No tienes un nutriólogo asignado todavía")
+        template_id = payload.get("template_id")
+        if not template_id:
+            raise ValueError("template_id is required")
+        template = await self._repository.get_checkin_template(owner_id, template_id)
+        if template is None:
+            raise LookupError("Template not found")
+        answers = payload.get("answers") or []
+        self._validate_checkin_answers(template, answers)
+        return await self._repository.create_checkin_response(
+            owner_id=owner_id,
+            patient_id=patient["id"],
+            template_id=template_id,
+            appointment_id=payload.get("appointment_id"),
+            answers=answers,
+        )
+
+    async def list_checkin_responses(self, user_id: str) -> list[dict]:
+        patient = await self._repository.get_patient_for_user(user_id)
+        if not patient:
+            return []
+        return await self._repository.list_checkin_responses(patient["id"])
+
+    def _validate_checkin_answers(self, template: dict, answers: list[dict]) -> None:
+        answered_field_ids = {a.get("field_id") for a in answers if a.get("values")}
+        for field in template.get("fields", []):
+            if field.get("required") and field.get("id") not in answered_field_ids:
+                raise ValueError(f"Missing required field: {field.get('label')}")
+
+    async def get_active_workout_plan(self, user_id: str) -> dict | None:
+        patient = await self._repository.get_patient_for_user(user_id)
+        if not patient:
+            return None
+        return await self._repository.get_active_workout_plan(patient["id"])
+
+    async def list_workout_logs(self, user_id: str, *, workout_plan_id: str | None = None) -> list[dict]:
+        patient = await self._repository.get_patient_for_user(user_id)
+        if not patient:
+            return []
+        return await self._repository.list_workout_logs(
+            patient["id"], workout_plan_id=workout_plan_id
+        )
+
+    async def toggle_workout_log(self, user_id: str, payload: dict) -> dict:
+        patient = await self._require_patient(user_id)
+        owner_id = patient.get("owner_id")
+        if not owner_id:
+            raise LookupError("No tienes un nutriólogo asignado todavía")
+        workout_plan_id = payload.get("workout_plan_id")
+        if not workout_plan_id:
+            raise ValueError("workout_plan_id is required")
+        day_index = payload.get("day_index")
+        exercise_index = payload.get("exercise_index")
+        if day_index is None or exercise_index is None:
+            raise ValueError("day_index and exercise_index are required")
+        return await self._repository.toggle_workout_log(
+            owner_id=owner_id,
+            patient_id=patient["id"],
+            workout_plan_id=workout_plan_id,
+            day_index=day_index,
+            exercise_index=exercise_index,
+            details=payload.get("details"),
+        )
 
     async def _require_patient(self, user_id: str) -> dict:
         patient = await self._repository.get_patient_for_user(user_id)

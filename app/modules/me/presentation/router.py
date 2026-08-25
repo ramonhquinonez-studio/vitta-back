@@ -1,11 +1,15 @@
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.deps import get_current_user
+from app.core.notify import send_push_to_tokens
+from app.core.storage import save_upload
 from app.db.mongo import get_db
+from app.schemas.checkin import FormResponseCreate, FormResponseOut, FormTemplateOut
+from app.schemas.messaging import MessageIn, MessageOut
 from app.schemas.patients import PatientUpdate
 
 from ..application.me_service import MeService
@@ -172,10 +176,31 @@ async def my_measurements(
 
 @router.post("/measurements", response_model=dict)
 async def add_measurement(
-    payload: dict[str, Any],
+    at: datetime | None = Form(None),
+    weight_kg: float | None = Form(None),
+    body_fat_pct: float | None = Form(None),
+    waist_cm: float | None = Form(None),
+    notes: str | None = Form(None),
+    file: UploadFile | None = File(None),
     current=Depends(get_current_user),
     service: MeService = Depends(get_me_service),
 ):
+    attachment_url: str | None = None
+    attachment_type: str | None = None
+    if file is not None and file.filename:
+        attachment_url, attachment_type = await save_upload(
+            file, subfolder=f"measurements/{_user_id(current)}"
+        )
+
+    payload = {
+        "at": at,
+        "weight_kg": weight_kg,
+        "body_fat_pct": body_fat_pct,
+        "waist_cm": waist_cm,
+        "notes": notes,
+        "attachment_url": attachment_url,
+        "attachment_type": attachment_type,
+    }
     try:
         return await service.add_measurement(_user_id(current), payload)
     except LookupError as exc:
@@ -207,6 +232,105 @@ async def add_my_hydration(
         return await service.add_hydration(_user_id(current), delta)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/messages", response_model=list[MessageOut])
+async def my_messages(
+    since: datetime | None = Query(None),
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    messages = await service.list_messages(_user_id(current), since=since)
+    return [MessageOut(**m) for m in messages]
+
+
+@router.post("/messages", response_model=MessageOut, status_code=201)
+async def send_my_message(
+    payload: MessageIn,
+    current=Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    service: MeService = Depends(get_me_service),
+):
+    try:
+        message = await service.send_message(_user_id(current), payload.text)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    patient = await service.get_my_patient_record(_user_id(current))
+    owner_id = patient.get("owner_id") if patient else None
+    if owner_id:
+        tokens = [d["token"] async for d in db.devices.find({"user_id": owner_id}, {"token": 1, "_id": 0})]
+        send_push_to_tokens(
+            tokens,
+            "Nuevo mensaje de tu paciente",
+            payload.text[:120],
+            {"type": "chat_message", "patientId": patient.get("id", "")},
+        )
+
+    return MessageOut(**message)
+
+
+@router.get("/checkin-templates", response_model=list[FormTemplateOut])
+async def my_checkin_templates(
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    return await service.list_checkin_templates(_user_id(current))
+
+
+@router.post("/checkin-responses", response_model=FormResponseOut, status_code=201)
+async def submit_my_checkin_response(
+    payload: FormResponseCreate,
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    try:
+        return await service.submit_checkin_response(_user_id(current), payload.model_dump())
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/checkin-responses", response_model=list[FormResponseOut])
+async def my_checkin_responses(
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    return await service.list_checkin_responses(_user_id(current))
+
+
+@router.get("/workout-plan/active", response_model=dict | None)
+async def my_active_workout_plan(
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    return await service.get_active_workout_plan(_user_id(current))
+
+
+@router.get("/workout-logs", response_model=list[dict])
+async def my_workout_logs(
+    workout_plan_id: str | None = Query(None),
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    return await service.list_workout_logs(_user_id(current), workout_plan_id=workout_plan_id)
+
+
+@router.post("/workout-logs/toggle", response_model=dict)
+async def toggle_my_workout_log(
+    payload: dict[str, Any],
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    try:
+        return await service.toggle_workout_log(_user_id(current), payload)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/progress", response_model=dict)

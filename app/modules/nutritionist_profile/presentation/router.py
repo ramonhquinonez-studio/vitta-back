@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_role
+from app.core.storage import save_upload
 from app.db.mongo import get_db
 from app.schemas.nutritionist_profile import NutritionistProfileOut, NutritionistProfileUpdate
 
@@ -9,7 +10,11 @@ from ..application.nutritionist_profile_service import NutritionistProfileServic
 from ..infrastructure.mongo_nutritionist_profile_repository import MongoNutritionistProfileRepository
 
 
-router = APIRouter(prefix="/nutritionist_profile", tags=["nutritionist_profile"])
+router = APIRouter(
+    prefix="/nutritionist_profile",
+    tags=["nutritionist_profile"],
+    dependencies=[Depends(require_role("nutritionist"))],
+)
 
 
 def get_nutritionist_profile_service(
@@ -56,3 +61,17 @@ async def complete_my_onboarding(
     service: NutritionistProfileService = Depends(get_nutritionist_profile_service),
 ):
     return await service.complete_onboarding(_owner_id(current))
+
+
+@router.post("/me/logo", response_model=NutritionistProfileOut)
+async def upload_my_logo(
+    file: UploadFile = File(...),
+    current=Depends(get_current_user),
+    service: NutritionistProfileService = Depends(get_nutritionist_profile_service),
+):
+    owner_id = _owner_id(current)
+    logo_url, _content_type = await save_upload(file, subfolder=f"nutritionist_profile/{owner_id}")
+    try:
+        return await service.update_my_profile(owner_id, {"logo_url": logo_url})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

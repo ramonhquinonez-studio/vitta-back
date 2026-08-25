@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_role
 from app.core.storage import save_upload
 from app.db.mongo import get_db
 from app.schemas.plan import PlanCreate, PlanOut, PlanUpdate
@@ -10,7 +10,11 @@ from ..application.plans_service import PlansService
 from ..infrastructure.mongo_plans_repository import MongoPlansRepository
 
 
-router = APIRouter(prefix="/plans", tags=["plans"])
+router = APIRouter(
+    prefix="/plans",
+    tags=["plans"],
+    dependencies=[Depends(require_role("nutritionist"))],
+)
 
 
 def get_plans_service(

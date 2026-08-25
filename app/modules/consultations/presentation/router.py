@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_role
 from app.db.mongo import get_db
 from app.schemas.consultation import (
     ConsultationCloseIn,
@@ -26,7 +26,11 @@ from ..application.consultations_service import ConsultationsService
 from ..domain.entities import Consultation
 from ..infrastructure.mongo_consultations_repository import MongoConsultationsRepository
 
-router = APIRouter(prefix="/consultations", tags=["consultations"])
+router = APIRouter(
+    prefix="/consultations",
+    tags=["consultations"],
+    dependencies=[Depends(require_role("nutritionist"))],
+)
 
 
 def get_consultations_service(

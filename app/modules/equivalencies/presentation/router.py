@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_role
 from app.db.mongo import get_db
 from app.schemas.equivalencies import (
     EquivalencyFoodCreate,
@@ -48,7 +48,7 @@ async def list_foods(
 @router.post("/foods", response_model=EquivalencyFoodOut, status_code=201)
 async def create_food(
     payload: EquivalencyFoodCreate,
-    current=Depends(get_current_user),
+    current=Depends(require_role("nutritionist")),
     service: EquivalenciesService = Depends(get_equivalencies_service),
 ):
     try:
@@ -60,7 +60,7 @@ async def create_food(
 @router.delete("/foods/{food_id}", status_code=204)
 async def delete_food(
     food_id: str,
-    current=Depends(get_current_user),
+    current=Depends(require_role("nutritionist")),
     service: EquivalenciesService = Depends(get_equivalencies_service),
 ):
     try:

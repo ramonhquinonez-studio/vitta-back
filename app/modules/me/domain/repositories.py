@@ -107,5 +107,51 @@ class MeRepository(Protocol):
     async def get_hydration_today(self, patient_id: str) -> dict:
         ...
 
-    async def add_hydration(self, patient_id: str, *, delta_ml: int) -> dict:
+    async def add_hydration(self, patient_id: str, owner_id: str | None, *, delta_ml: int) -> dict:
+        ...
+
+    async def list_messages(
+        self, owner_id: str | None, patient_id: str, *, since: datetime | None = None
+    ) -> list[dict]:
+        ...
+
+    async def create_message(self, owner_id: str | None, patient_id: str, *, text: str) -> dict:
+        ...
+
+    async def list_checkin_templates(self, owner_id: str) -> list[dict]:
+        ...
+
+    async def get_checkin_template(self, owner_id: str, template_id: str) -> dict | None:
+        ...
+
+    async def create_checkin_response(
+        self,
+        *,
+        owner_id: str,
+        patient_id: str,
+        template_id: str,
+        appointment_id: str | None,
+        answers: list[dict],
+    ) -> dict:
+        ...
+
+    async def list_checkin_responses(self, patient_id: str) -> list[dict]:
+        ...
+
+    async def get_active_workout_plan(self, patient_id: str) -> dict | None:
+        ...
+
+    async def list_workout_logs(self, patient_id: str, *, workout_plan_id: str | None = None) -> list[dict]:
+        ...
+
+    async def toggle_workout_log(
+        self,
+        *,
+        owner_id: str,
+        patient_id: str,
+        workout_plan_id: str,
+        day_index: int,
+        exercise_index: int,
+        details: dict | None = None,
+    ) -> dict:
         ...

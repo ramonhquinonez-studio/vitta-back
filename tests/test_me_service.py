@@ -19,6 +19,15 @@ class _FakeMeRepository:
         self.food_diary_entries = []
         self.created_food_diary_entry = None
         self.hydration = {"current_ml": 0, "target_ml": 2000}
+        self.messages = []
+        self.message_sequence = 1
+        self.created_measurement_payload = None
+        self.checkin_templates = {}
+        self.checkin_responses = []
+        self.checkin_response_sequence = 1
+        self.active_workout_plan = None
+        self.workout_logs = []
+        self.last_toggle_kwargs = None
 
     async def get_user(self, user_id):
         return {"id": user_id, "email": "maria@email.com", "name": "Maria"}
@@ -63,7 +72,17 @@ class _FakeMeRepository:
         return []
 
     async def create_measurement(self, *, owner_id, patient_id, payload):
-        return {}
+        self.created_measurement_payload = payload
+        return {
+            "id": "measurement-1",
+            "at": payload.get("at"),
+            "weight_kg": payload.get("weight_kg"),
+            "body_fat_pct": payload.get("body_fat_pct"),
+            "waist_cm": payload.get("waist_cm"),
+            "notes": payload.get("notes"),
+            "attachment_url": payload.get("attachment_url"),
+            "attachment_type": payload.get("attachment_type"),
+        }
 
     async def list_measurements_since(self, patient_id, *, since):
         return self.series
@@ -132,11 +151,107 @@ class _FakeMeRepository:
     async def get_hydration_today(self, patient_id):
         return self.hydration
 
-    async def add_hydration(self, patient_id, *, delta_ml):
+    async def add_hydration(self, patient_id, owner_id, *, delta_ml):
         target = self.hydration["target_ml"]
         next_ml = max(0, min(target, self.hydration["current_ml"] + delta_ml))
         self.hydration = {"current_ml": next_ml, "target_ml": target}
         return self.hydration
+
+    async def list_messages(self, owner_id, patient_id, *, since=None):
+        items = self.messages
+        if since is not None:
+            items = [m for m in items if m["created_at"] > since]
+        return items
+
+    async def create_message(self, owner_id, patient_id, *, text):
+        if owner_id is None:
+            raise LookupError("No nutritionist assigned yet")
+        message = {
+            "id": str(self.message_sequence),
+            "sender_role": "patient",
+            "text": text,
+            "created_at": datetime.now(UTC),
+            "read_at": None,
+        }
+        self.message_sequence += 1
+        self.messages.append(message)
+        return message
+
+    async def list_checkin_templates(self, owner_id):
+        return [t for t in self.checkin_templates.values() if t.get("owner_id") == owner_id]
+
+    async def get_checkin_template(self, owner_id, template_id):
+        template = self.checkin_templates.get(template_id)
+        if template and template.get("owner_id") == owner_id:
+            return template
+        return None
+
+    async def create_checkin_response(
+        self, *, owner_id, patient_id, template_id, appointment_id, answers
+    ):
+        response = {
+            "id": str(self.checkin_response_sequence),
+            "owner_id": owner_id,
+            "patient_id": patient_id,
+            "template_id": template_id,
+            "appointment_id": appointment_id,
+            "answers": answers,
+            "submitted_at": datetime.now(UTC),
+        }
+        self.checkin_response_sequence += 1
+        self.checkin_responses.append(response)
+        return response
+
+    async def list_checkin_responses(self, patient_id):
+        return [r for r in self.checkin_responses if r["patient_id"] == patient_id]
+
+    async def get_active_workout_plan(self, patient_id):
+        return self.active_workout_plan
+
+    async def list_workout_logs(self, patient_id, *, workout_plan_id=None):
+        items = self.workout_logs
+        if workout_plan_id is not None:
+            items = [w for w in items if w["workout_plan_id"] == workout_plan_id]
+        return items
+
+    async def toggle_workout_log(
+        self, *, owner_id, patient_id, workout_plan_id, day_index, exercise_index, details=None
+    ):
+        self.last_toggle_kwargs = {
+            "owner_id": owner_id,
+            "patient_id": patient_id,
+            "workout_plan_id": workout_plan_id,
+            "day_index": day_index,
+            "exercise_index": exercise_index,
+            "details": details,
+        }
+        key = (workout_plan_id, day_index, exercise_index)
+        existing = next(
+            (
+                w
+                for w in self.workout_logs
+                if (w["workout_plan_id"], w["day_index"], w["exercise_index"]) == key
+            ),
+            None,
+        )
+        if existing is not None:
+            self.workout_logs.remove(existing)
+            return {"completed": False}
+        details = details or {}
+        self.workout_logs.append(
+            {
+                "workout_plan_id": workout_plan_id,
+                "day_index": day_index,
+                "exercise_index": exercise_index,
+                "completed_at": datetime.now(UTC),
+                "sets_completed": details.get("sets_completed"),
+                "reps_completed": details.get("reps_completed"),
+                "weight_kg": details.get("weight_kg"),
+                "rpe": details.get("rpe"),
+                "comment": details.get("comment"),
+            }
+        )
+        return {"completed": True}
 
 
 class MeServiceTest(unittest.IsolatedAsyncioTestCase):
@@ -158,6 +273,25 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["delta"]["weight_kg"], -2.5)
         self.assertEqual(result["delta"]["body_fat_pct"], -1.5)
+
+    async def test_add_measurement_round_trips_the_attachment(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+
+        result = await service.add_measurement(
+            "user-1",
+            {
+                "weight_kg": 78.4,
+                "attachment_url": "/uploads/measurements/user-1/photo.jpg",
+                "attachment_type": "image/jpeg",
+            },
+        )
+
+        self.assertEqual(
+            repository.created_measurement_payload["attachment_url"],
+            "/uploads/measurements/user-1/photo.jpg",
+        )
+        self.assertEqual(result["attachment_type"], "image/jpeg")
 
     async def test_request_appointment_defaults_end_and_pending(self):
         repository = _FakeMeRepository()
@@ -336,6 +470,202 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(LookupError):
             await service.add_hydration("user-1", 250)
+
+    async def test_send_message_creates_a_message_when_owner_is_assigned(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+
+        message = await service.send_message("user-1", "Hola doctor")
+
+        self.assertEqual(message["text"], "Hola doctor")
+        self.assertEqual(message["sender_role"], "patient")
+
+    async def test_send_message_rejects_blank_text(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+
+        with self.assertRaises(ValueError):
+            await service.send_message("user-1", "   ")
+
+    async def test_send_message_rejects_a_patient_without_a_nutritionist(self):
+        repository = _FakeMeRepository()
+        repository.patient["owner_id"] = None
+        service = MeService(repository)
+
+        with self.assertRaises(LookupError):
+            await service.send_message("user-1", "hola")
+
+    async def test_list_messages_returns_empty_for_a_user_without_a_patient(self):
+        repository = _FakeMeRepository()
+        repository.patient = None
+        service = MeService(repository)
+
+        result = await service.list_messages("user-1")
+
+        self.assertEqual(result, [])
+
+    async def test_list_checkin_templates_returns_the_owners_templates(self):
+        repository = _FakeMeRepository()
+        repository.checkin_templates["t1"] = {
+            "id": "t1",
+            "owner_id": "owner-1",
+            "title": "Check-in semanal",
+            "fields": [{"id": "f1", "type": "text", "label": "¿Cómo te sentiste?", "required": True}],
+        }
+        service = MeService(repository)
+
+        result = await service.list_checkin_templates("user-1")
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["title"], "Check-in semanal")
+
+    async def test_list_checkin_templates_returns_empty_for_a_patient_without_a_nutritionist(self):
+        repository = _FakeMeRepository()
+        repository.patient["owner_id"] = None
+        service = MeService(repository)
+
+        result = await service.list_checkin_templates("user-1")
+
+        self.assertEqual(result, [])
+
+    async def test_submit_checkin_response_creates_a_response(self):
+        repository = _FakeMeRepository()
+        repository.checkin_templates["t1"] = {
+            "id": "t1",
+            "owner_id": "owner-1",
+            "title": "Check-in semanal",
+            "fields": [{"id": "f1", "type": "text", "label": "¿Cómo te sentiste?", "required": True}],
+        }
+        service = MeService(repository)
+
+        result = await service.submit_checkin_response(
+            "user-1",
+            {"template_id": "t1", "appointment_id": None, "answers": [{"field_id": "f1", "values": ["Bien"]}]},
+        )
+
+        self.assertEqual(result["template_id"], "t1")
+        self.assertEqual(repository.checkin_responses[0]["patient_id"], "patient-1")
+
+    async def test_submit_checkin_response_rejects_a_missing_required_field(self):
+        repository = _FakeMeRepository()
+        repository.checkin_templates["t1"] = {
+            "id": "t1",
+            "owner_id": "owner-1",
+            "title": "Check-in semanal",
+            "fields": [{"id": "f1", "type": "text", "label": "¿Cómo te sentiste?", "required": True}],
+        }
+        service = MeService(repository)
+
+        with self.assertRaises(ValueError):
+            await service.submit_checkin_response(
+                "user-1", {"template_id": "t1", "appointment_id": None, "answers": []}
+            )
+
+    async def test_submit_checkin_response_rejects_a_template_not_owned_by_the_patients_nutritionist(self):
+        repository = _FakeMeRepository()
+        repository.checkin_templates["t1"] = {
+            "id": "t1",
+            "owner_id": "someone-else",
+            "title": "Otro",
+            "fields": [],
+        }
+        service = MeService(repository)
+
+        with self.assertRaises(LookupError):
+            await service.submit_checkin_response(
+                "user-1", {"template_id": "t1", "appointment_id": None, "answers": []}
+            )
+
+    async def test_list_checkin_responses_returns_the_patients_own_history(self):
+        repository = _FakeMeRepository()
+        repository.checkin_templates["t1"] = {
+            "id": "t1",
+            "owner_id": "owner-1",
+            "title": "Check-in semanal",
+            "fields": [{"id": "f1", "type": "text", "label": "x", "required": False}],
+        }
+        service = MeService(repository)
+        await service.submit_checkin_response(
+            "user-1", {"template_id": "t1", "appointment_id": None, "answers": []}
+        )
+
+        result = await service.list_checkin_responses("user-1")
+
+        self.assertEqual(len(result), 1)
+
+    async def test_get_active_workout_plan_returns_the_repositorys_result(self):
+        repository = _FakeMeRepository()
+        repository.active_workout_plan = {"id": "wp1", "name": "Rutina"}
+        service = MeService(repository)
+
+        result = await service.get_active_workout_plan("user-1")
+
+        self.assertEqual(result["name"], "Rutina")
+
+    async def test_get_active_workout_plan_returns_none_for_a_user_without_a_patient(self):
+        repository = _FakeMeRepository()
+        repository.patient = None
+        service = MeService(repository)
+
+        result = await service.get_active_workout_plan("user-1")
+
+        self.assertIsNone(result)
+
+    async def test_toggle_workout_log_marks_an_exercise_complete_then_incomplete(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+        payload = {"workout_plan_id": "wp1", "day_index": 0, "exercise_index": 0}
+
+        first = await service.toggle_workout_log("user-1", payload)
+        second = await service.toggle_workout_log("user-1", payload)
+
+        self.assertEqual(first, {"completed": True})
+        self.assertEqual(second, {"completed": False})
+        self.assertEqual(repository.last_toggle_kwargs["owner_id"], "owner-1")
+
+    async def test_toggle_workout_log_persists_logged_performance_details(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+        payload = {
+            "workout_plan_id": "wp1",
+            "day_index": 0,
+            "exercise_index": 0,
+            "details": {"sets_completed": 4, "reps_completed": 10, "weight_kg": 42.5, "rpe": 8, "comment": "Se sintió bien"},
+        }
+
+        result = await service.toggle_workout_log("user-1", payload)
+
+        self.assertEqual(result, {"completed": True})
+        self.assertEqual(repository.workout_logs[0]["weight_kg"], 42.5)
+        self.assertEqual(repository.workout_logs[0]["rpe"], 8)
+        self.assertEqual(repository.workout_logs[0]["comment"], "Se sintió bien")
+
+    async def test_toggle_workout_log_requires_a_workout_plan_id(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+
+        with self.assertRaises(ValueError):
+            await service.toggle_workout_log("user-1", {"day_index": 0, "exercise_index": 0})
+
+    async def test_toggle_workout_log_rejects_a_patient_without_a_nutritionist(self):
+        repository = _FakeMeRepository()
+        repository.patient["owner_id"] = None
+        service = MeService(repository)
+        payload = {"workout_plan_id": "wp1", "day_index": 0, "exercise_index": 0}
+
+        with self.assertRaises(LookupError):
+            await service.toggle_workout_log("user-1", payload)
+
+    async def test_list_workout_logs_returns_the_patients_own_logs(self):
+        repository = _FakeMeRepository()
+        repository.workout_logs = [
+            {"workout_plan_id": "wp1", "day_index": 0, "exercise_index": 0, "completed_at": datetime.now(UTC)}
+        ]
+        service = MeService(repository)
+
+        result = await service.list_workout_logs("user-1")
+
+        self.assertEqual(len(result), 1)
 
     async def test_list_articles_merges_platform_and_the_patients_own_nutritionist(self):
         repository = _FakeMeRepository()

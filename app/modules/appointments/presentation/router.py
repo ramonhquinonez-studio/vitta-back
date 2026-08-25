@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_role
 from app.db.mongo import get_db
 
 from ..application.appointments_service import AppointmentsService, OverlapError
@@ -14,7 +14,11 @@ from ..infrastructure.google_calendar_gateway import GoogleCalendarGateway
 from ..infrastructure.mongo_appointments_repository import MongoAppointmentsRepository
 
 
-router = APIRouter(prefix="/appointments", tags=["appointments"])
+router = APIRouter(
+    prefix="/appointments",
+    tags=["appointments"],
+    dependencies=[Depends(require_role("nutritionist"))],
+)
 
 
 class AppointmentCreate(BaseModel):

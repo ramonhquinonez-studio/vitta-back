@@ -3,9 +3,11 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_role
+from app.core.quota import PatientQuotaCheckerAdapter
 from app.core.storage import save_upload
 from app.db.mongo import get_db
+from app.modules.billing.presentation.router import get_billing_service
 from app.schemas.auth import InviteCodeOut
 from app.schemas.pagination import Page, PaginationParams
 from app.schemas.patients import ClaimPatientIn, PatientIn, PatientOut, PatientUpdate
@@ -15,13 +17,19 @@ from ..domain.entities import Patient
 from ..infrastructure.mongo_patients_repository import MongoPatientsRepository
 
 
-router = APIRouter(prefix="/patients", tags=["patients"])
+router = APIRouter(
+    prefix="/patients",
+    tags=["patients"],
+    dependencies=[Depends(require_role("nutritionist"))],
+)
 
 
 def get_patients_service(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> PatientsService:
-    return PatientsService(MongoPatientsRepository(db))
+    repository = MongoPatientsRepository(db)
+    quota_checker = PatientQuotaCheckerAdapter(get_billing_service(db), repository.count_for_owner)
+    return PatientsService(repository, quota_checker=quota_checker)
 
 
 def _owner_id(current) -> str:
@@ -72,7 +80,10 @@ async def create_patient(
     current=Depends(get_current_user),
     service: PatientsService = Depends(get_patients_service),
 ):
-    patient = await service.create_patient(_owner_id(current), payload.model_dump())
+    try:
+        patient = await service.create_patient(_owner_id(current), payload.model_dump())
+    except PermissionError as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
     return _serialize(patient)
 
 
@@ -98,6 +109,8 @@ async def claim_patient(
         patient = await service.claim_patient(_owner_id(current), payload.code)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
     return _serialize(patient)
 
 
@@ -252,6 +265,54 @@ async def list_patient_body_compositions(
 ):
     try:
         return await service.list_body_compositions(_owner_id(current), patient_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{patient_id}/measurements", response_model=list[dict])
+async def list_patient_measurements(
+    patient_id: str,
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+):
+    try:
+        return await service.list_measurements(_owner_id(current), patient_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{patient_id}/checkin-responses", response_model=list[dict])
+async def list_patient_checkin_responses(
+    patient_id: str,
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+):
+    try:
+        return await service.list_checkin_responses(_owner_id(current), patient_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{patient_id}/workout-plan-assignments", response_model=list[dict])
+async def list_patient_workout_plan_assignments(
+    patient_id: str,
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+):
+    try:
+        return await service.list_workout_plan_assignments(_owner_id(current), patient_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{patient_id}/workout-logs", response_model=list[dict])
+async def list_patient_workout_logs(
+    patient_id: str,
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+):
+    try:
+        return await service.list_workout_logs(_owner_id(current), patient_id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

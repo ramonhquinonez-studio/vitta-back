@@ -11,6 +11,10 @@ class _FakePatientsRepository:
         self.body_compositions: dict[str, list[dict]] = {}
         self.food_diary_entries: dict[str, list[dict]] = {}
         self.plan_assignments: dict[str, list[dict]] = {}
+        self.measurements: dict[str, list[dict]] = {}
+        self.checkin_responses: dict[str, list[dict]] = {}
+        self.workout_plan_assignments: dict[str, list[dict]] = {}
+        self.workout_logs: dict[str, list[dict]] = {}
         self.invite_sequence = 0
         self.last_invite_patient_id = "unset"
         self.connection_codes: dict[str, str] = {}
@@ -85,6 +89,30 @@ class _FakePatientsRepository:
             return None
         return self.plan_assignments.get(patient_id, [])
 
+    async def list_measurements(self, owner_id, patient_id):
+        patient = await self.get_for_owner(owner_id, patient_id)
+        if patient is None:
+            return None
+        return self.measurements.get(patient_id, [])
+
+    async def list_checkin_responses(self, owner_id, patient_id):
+        patient = await self.get_for_owner(owner_id, patient_id)
+        if patient is None:
+            return None
+        return self.checkin_responses.get(patient_id, [])
+
+    async def list_workout_plan_assignments(self, owner_id, patient_id):
+        patient = await self.get_for_owner(owner_id, patient_id)
+        if patient is None:
+            return None
+        return self.workout_plan_assignments.get(patient_id, [])
+
+    async def list_workout_logs(self, owner_id, patient_id):
+        patient = await self.get_for_owner(owner_id, patient_id)
+        if patient is None:
+            return None
+        return self.workout_logs.get(patient_id, [])
+
     async def create_invite_code(self, owner_id, patient_id=None):
         self.invite_sequence += 1
         self.last_invite_patient_id = patient_id
@@ -118,6 +146,15 @@ class _FakePatientsRepository:
         self.patients[patient_id] = updated
         del self.connection_codes[code]
         return updated
+
+
+class _FakeQuotaChecker:
+    def __init__(self, *, allow: bool):
+        self._allow = allow
+
+    async def check(self, owner_id):
+        if not self._allow:
+            raise PermissionError("Has llegado al límite de tu plan actual.")
 
 
 class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
@@ -208,6 +245,81 @@ class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(LookupError):
             await service.list_plan_assignments("owner-2", patient.id)
 
+    async def test_list_measurements_returns_the_patients_self_logged_entries(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+        repository.measurements[patient.id] = [
+            {"weight_kg": 78.4, "attachment_url": "/uploads/measurements/u1/photo.jpg"},
+        ]
+
+        result = await service.list_measurements("owner-1", patient.id)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["attachment_url"], "/uploads/measurements/u1/photo.jpg")
+
+    async def test_list_measurements_rejects_a_patient_not_owned(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+
+        with self.assertRaises(LookupError):
+            await service.list_measurements("owner-2", patient.id)
+
+    async def test_list_checkin_responses_returns_the_patients_submitted_responses(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+        repository.checkin_responses[patient.id] = [
+            {"template_id": "t1", "answers": [{"field_id": "f1", "values": ["Bien"]}]},
+        ]
+
+        result = await service.list_checkin_responses("owner-1", patient.id)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["template_id"], "t1")
+
+    async def test_list_checkin_responses_rejects_a_patient_not_owned(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+
+        with self.assertRaises(LookupError):
+            await service.list_checkin_responses("owner-2", patient.id)
+
+    async def test_list_workout_plan_assignments_returns_the_patients_history(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+        repository.workout_plan_assignments[patient.id] = [
+            {"plan_id": "wp1", "plan_name": "Rutina", "assigned_at": "2026-08-10"},
+        ]
+
+        result = await service.list_workout_plan_assignments("owner-1", patient.id)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["plan_name"], "Rutina")
+
+    async def test_list_workout_plan_assignments_rejects_a_patient_not_owned(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+
+        with self.assertRaises(LookupError):
+            await service.list_workout_plan_assignments("owner-2", patient.id)
+
+    async def test_list_workout_logs_returns_the_patients_adherence(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+        repository.workout_logs[patient.id] = [
+            {"workout_plan_id": "wp1", "day_index": 0, "exercise_index": 0},
+        ]
+
+        result = await service.list_workout_logs("owner-1", patient.id)
+
+        self.assertEqual(len(result), 1)
+
     async def test_create_invite_code_without_a_patient_id_delegates_directly(self):
         repository = _FakePatientsRepository()
         service = PatientsService(repository)
@@ -271,3 +383,30 @@ class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(LookupError):
             await service.claim_patient("owner-2", "SOLO2026")
+
+    async def test_create_patient_rejects_when_the_quota_checker_raises(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository, quota_checker=_FakeQuotaChecker(allow=False))
+
+        with self.assertRaises(PermissionError):
+            await service.create_patient("owner-1", {"name": "Nueva Paciente"})
+
+        self.assertEqual(len(repository.patients), 0)
+
+    async def test_create_patient_succeeds_when_the_quota_checker_allows(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository, quota_checker=_FakeQuotaChecker(allow=True))
+
+        patient = await service.create_patient("owner-1", {"name": "Nueva Paciente"})
+
+        self.assertEqual(patient.name, "Nueva Paciente")
+
+    async def test_claim_patient_rejects_when_the_quota_checker_raises(self):
+        repository = _FakePatientsRepository()
+        await repository.create_unclaimed("Sola Paciente", "SOLO2026")
+        service = PatientsService(repository, quota_checker=_FakeQuotaChecker(allow=False))
+
+        with self.assertRaises(PermissionError):
+            await service.claim_patient("owner-1", "SOLO2026")
+
+        self.assertIn("SOLO2026", repository.connection_codes)

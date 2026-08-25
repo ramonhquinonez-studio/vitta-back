@@ -17,3 +17,4 @@ google-auth-oauthlib
 requests
 firebase-admin
 python-multipart
+stripe

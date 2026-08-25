@@ -76,6 +76,7 @@ class AppointmentsService:
             google_event_id = await self._calendar_gateway.create_event(owner_id, appointment)
             if google_event_id:
                 updated = await self._repository.set_google_event_id(
+                    owner_id,
                     appointment.id,
                     google_event_id,
                 )
@@ -158,7 +159,7 @@ class AppointmentsService:
 
             google_event_id = await self._calendar_gateway.create_event(owner_id, updated)
             if google_event_id:
-                curr = await self._repository.set_google_event_id(updated.id, google_event_id)
+                curr = await self._repository.set_google_event_id(owner_id, updated.id, google_event_id)
                 if curr is not None:
                     return curr
         except Exception:

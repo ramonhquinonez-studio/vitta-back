@@ -3,7 +3,11 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 
 from app.core.config import settings
+from app.core.quota import PatientQuotaCheckerAdapter
+from app.core.rate_limit import rate_limit
 from app.db.mongo import get_db
+from app.modules.billing.presentation.router import get_billing_service
+from app.modules.patients.infrastructure.mongo_patients_repository import MongoPatientsRepository
 from app.schemas.auth import (
     ForgotPasswordIn,
     ForgotPasswordOut,
@@ -31,7 +35,10 @@ class RegisterOut(BaseModel):
 def get_auth_service(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> AuthService:
-    return AuthService(MongoAuthRepository(db))
+    quota_checker = PatientQuotaCheckerAdapter(
+        get_billing_service(db), MongoPatientsRepository(db).count_for_owner
+    )
+    return AuthService(MongoAuthRepository(db), quota_checker=quota_checker)
 
 
 @router.get("/invite-codes/{code}", response_model=InvitePreviewOut)
@@ -43,7 +50,11 @@ async def preview_invite_code(
     return InvitePreviewOut(**result)
 
 
-@router.post("/register", response_model=RegisterOut)
+@router.post(
+    "/register",
+    response_model=RegisterOut,
+    dependencies=[Depends(rate_limit("register", limit=10, window_seconds=3600))],
+)
 async def register(
     payload: RegisterIn,
     service: AuthService = Depends(get_auth_service),
@@ -61,14 +72,21 @@ async def register(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
 
     return RegisterOut(id=user.id, email=user.email)
 
 
-@router.post("/register-nutritionist", response_model=RegisterOut)
+@router.post(
+    "/register-nutritionist",
+    response_model=RegisterOut,
+    dependencies=[Depends(rate_limit("register-nutritionist", limit=10, window_seconds=3600))],
+)
 async def register_nutritionist(
     payload: RegisterNutritionistIn,
     service: AuthService = Depends(get_auth_service),
+    db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     try:
         user = await service.register_nutritionist(
@@ -80,6 +98,10 @@ async def register_nutritionist(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # Every nutritionist starts on the default (free) plan from the moment
+    # they register — no null-plan edge case for quota checks to trip over.
+    await get_billing_service(db).enroll_default_plan(user.id)
 
     return RegisterOut(id=user.id, email=user.email)
 

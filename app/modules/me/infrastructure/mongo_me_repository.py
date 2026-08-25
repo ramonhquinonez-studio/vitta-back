@@ -205,6 +205,8 @@ class MongoMeRepository:
             "body_fat_pct": payload.get("body_fat_pct"),
             "waist_cm": payload.get("waist_cm"),
             "notes": payload.get("notes"),
+            "attachment_url": payload.get("attachment_url"),
+            "attachment_type": payload.get("attachment_type"),
             "created_at": datetime.utcnow(),
         }
         result = await self._db.measurements.insert_one(document)
@@ -330,6 +332,9 @@ class MongoMeRepository:
             "session_price": profile.get("session_price"),
             "session_price_currency": profile.get("session_price_currency") or "MXN",
             "social_links": profile.get("social_links") or [],
+            "practice_name": profile.get("practice_name"),
+            "logo_url": profile.get("logo_url"),
+            "brand_color": profile.get("brand_color"),
             "patient_count": patient_count,
         }
 
@@ -481,8 +486,9 @@ class MongoMeRepository:
             "target_ml": doc.get("target_ml", _DEFAULT_HYDRATION_TARGET_ML),
         }
 
-    async def add_hydration(self, patient_id: str, *, delta_ml: int) -> dict:
+    async def add_hydration(self, patient_id: str, owner_id: str | None, *, delta_ml: int) -> dict:
         patient_oid = self._as_oid(patient_id)
+        owner_oid = self._as_oid(owner_id) if owner_id else None
         date_key = datetime.utcnow().strftime("%Y-%m-%d")
         existing = await self._db.hydration_logs.find_one(
             {"patient_id": patient_oid, "date": date_key}
@@ -501,6 +507,7 @@ class MongoMeRepository:
                     "current_ml": next_ml,
                     "target_ml": target_ml,
                     "updated_at": datetime.utcnow(),
+                    "owner_id": owner_oid,
                 },
                 "$setOnInsert": {
                     "patient_id": patient_oid,
@@ -511,6 +518,190 @@ class MongoMeRepository:
             upsert=True,
         )
         return {"current_ml": next_ml, "target_ml": target_ml}
+
+    async def list_messages(
+        self, owner_id: str | None, patient_id: str, *, since: datetime | None = None
+    ) -> list[dict]:
+        if owner_id is None:
+            return []
+        filt: dict = {
+            "owner_id": self._as_oid(owner_id),
+            "patient_id": self._as_oid(patient_id),
+        }
+        if since is not None:
+            filt["created_at"] = {"$gt": since}
+        cursor = self._db.messages.find(filt).sort("created_at", 1)
+        return [self._serialize_message(doc) async for doc in cursor]
+
+    async def create_message(self, owner_id: str | None, patient_id: str, *, text: str) -> dict:
+        if owner_id is None:
+            raise LookupError("No nutritionist assigned yet")
+        document = {
+            "owner_id": self._as_oid(owner_id),
+            "patient_id": self._as_oid(patient_id),
+            "sender_role": "patient",
+            "text": text,
+            "created_at": datetime.utcnow(),
+            "read_at": None,
+        }
+        result = await self._db.messages.insert_one(document)
+        document["_id"] = result.inserted_id
+        return self._serialize_message(document)
+
+    def _serialize_message(self, doc: dict) -> dict:
+        return {
+            "id": str(doc["_id"]),
+            "sender_role": doc.get("sender_role"),
+            "text": doc.get("text"),
+            "created_at": doc.get("created_at"),
+            "read_at": doc.get("read_at"),
+        }
+
+    async def list_checkin_templates(self, owner_id: str) -> list[dict]:
+        owner_oid = self._as_oid(owner_id)
+        cursor = self._db.checkin_templates.find(
+            {"owner_id": owner_oid, "archived": {"$ne": True}}
+        ).sort("created_at", -1)
+        return [self._serialize_checkin_template(doc) async for doc in cursor]
+
+    async def get_checkin_template(self, owner_id: str, template_id: str) -> dict | None:
+        owner_oid = self._as_oid(owner_id)
+        template_oid = self._as_oid(template_id)
+        document = await self._db.checkin_templates.find_one(
+            {"_id": template_oid, "owner_id": owner_oid}
+        )
+        if document is None:
+            return None
+        return self._serialize_checkin_template(document)
+
+    async def create_checkin_response(
+        self,
+        *,
+        owner_id: str,
+        patient_id: str,
+        template_id: str,
+        appointment_id: str | None,
+        answers: list[dict],
+    ) -> dict:
+        document = {
+            "owner_id": self._as_oid(owner_id),
+            "patient_id": self._as_oid(patient_id),
+            "template_id": self._as_oid(template_id),
+            "appointment_id": self._as_oid(appointment_id) if appointment_id else None,
+            "answers": [
+                {"field_id": a["field_id"], "values": a.get("values") or []} for a in answers
+            ],
+            "submitted_at": datetime.utcnow(),
+        }
+        result = await self._db.checkin_responses.insert_one(document)
+        document["_id"] = result.inserted_id
+        return self._serialize_checkin_response(document)
+
+    async def list_checkin_responses(self, patient_id: str) -> list[dict]:
+        patient_oid = self._as_oid(patient_id)
+        cursor = self._db.checkin_responses.find({"patient_id": patient_oid}).sort(
+            "submitted_at", -1
+        )
+        return [self._serialize_checkin_response(doc) async for doc in cursor]
+
+    def _serialize_checkin_template(self, doc: dict) -> dict:
+        return {
+            "id": str(doc["_id"]),
+            "title": doc.get("title"),
+            "description": doc.get("description"),
+            "fields": doc.get("fields", []),
+            "archived": doc.get("archived", False),
+            "created_at": doc.get("created_at"),
+            "updated_at": doc.get("updated_at"),
+        }
+
+    def _serialize_checkin_response(self, doc: dict) -> dict:
+        return {
+            "id": str(doc["_id"]),
+            "template_id": str(doc["template_id"]),
+            "appointment_id": str(doc["appointment_id"]) if doc.get("appointment_id") else None,
+            "answers": doc.get("answers", []),
+            "submitted_at": doc.get("submitted_at"),
+        }
+
+    async def get_active_workout_plan(self, patient_id: str) -> dict | None:
+        patient_oid = self._as_oid(patient_id)
+        assignments = await (
+            self._db.workout_plan_assignments.find({"patient_id": patient_oid})
+            .sort("assigned_at", -1)
+            .to_list(1)
+        )
+        if not assignments:
+            return None
+        plan_id = assignments[0].get("plan_id")
+        if not plan_id:
+            return None
+        plan = await self._db.workout_plans.find_one({"_id": plan_id})
+        if not plan:
+            return None
+        return {
+            "id": str(plan["_id"]),
+            "name": plan.get("name"),
+            "goal": plan.get("goal"),
+            "days": plan.get("days", []),
+            "updated_at": plan.get("updated_at"),
+        }
+
+    async def list_workout_logs(
+        self, patient_id: str, *, workout_plan_id: str | None = None
+    ) -> list[dict]:
+        filt: dict = {"patient_id": self._as_oid(patient_id)}
+        if workout_plan_id is not None:
+            filt["workout_plan_id"] = self._as_oid(workout_plan_id)
+        cursor = self._db.workout_logs.find(filt)
+        return [self._serialize_workout_log(doc) async for doc in cursor]
+
+    async def toggle_workout_log(
+        self,
+        *,
+        owner_id: str,
+        patient_id: str,
+        workout_plan_id: str,
+        day_index: int,
+        exercise_index: int,
+        details: dict | None = None,
+    ) -> dict:
+        key = {
+            "owner_id": self._as_oid(owner_id),
+            "patient_id": self._as_oid(patient_id),
+            "workout_plan_id": self._as_oid(workout_plan_id),
+            "day_index": day_index,
+            "exercise_index": exercise_index,
+        }
+        existing = await self._db.workout_logs.find_one(key)
+        if existing is not None:
+            await self._db.workout_logs.delete_one({"_id": existing["_id"]})
+            return {"completed": False}
+        details = details or {}
+        document = {
+            **key,
+            "completed_at": datetime.utcnow(),
+            "sets_completed": details.get("sets_completed"),
+            "reps_completed": details.get("reps_completed"),
+            "weight_kg": details.get("weight_kg"),
+            "rpe": details.get("rpe"),
+            "comment": details.get("comment"),
+        }
+        await self._db.workout_logs.insert_one(document)
+        return {"completed": True}
+
+    def _serialize_workout_log(self, doc: dict) -> dict:
+        return {
+            "workout_plan_id": str(doc["workout_plan_id"]),
+            "day_index": doc["day_index"],
+            "exercise_index": doc["exercise_index"],
+            "completed_at": doc.get("completed_at"),
+            "sets_completed": doc.get("sets_completed"),
+            "reps_completed": doc.get("reps_completed"),
+            "weight_kg": doc.get("weight_kg"),
+            "rpe": doc.get("rpe"),
+            "comment": doc.get("comment"),
+        }
 
     def _serialize_appointment(self, doc: dict) -> dict:
         return {
@@ -535,6 +726,8 @@ class MongoMeRepository:
             "body_fat_pct": doc.get("body_fat_pct"),
             "waist_cm": doc.get("waist_cm"),
             "notes": doc.get("notes"),
+            "attachment_url": doc.get("attachment_url"),
+            "attachment_type": doc.get("attachment_type"),
         }
 
     def _as_oid(self, id_str: str) -> ObjectId:

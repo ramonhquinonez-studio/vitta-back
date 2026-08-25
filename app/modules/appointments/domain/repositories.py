@@ -60,7 +60,9 @@ class AppointmentsRepository(Protocol):
     async def patient_exists_for_owner(self, owner_id: str, patient_id: str) -> bool:
         ...
 
-    async def set_google_event_id(self, appointment_id: str, google_event_id: str) -> Appointment | None:
+    async def set_google_event_id(
+        self, owner_id: str, appointment_id: str, google_event_id: str
+    ) -> Appointment | None:
         ...
 
 

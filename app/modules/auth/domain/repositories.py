@@ -49,3 +49,15 @@ class AuthRepository(Protocol):
 
     async def update_password_hash(self, user_id: str, password_hash: str) -> None:
         ...
+
+
+class PatientQuotaChecker(Protocol):
+    """Dependency-inversion seam so `auth` can enforce a nutritionist's
+    subscription limit when an invite code is about to create a brand-new
+    patient — without importing anything from the `billing` module. The
+    presentation layer wires a concrete adapter satisfying this shape."""
+
+    async def check(self, owner_id: str) -> None:
+        """Raise PermissionError when the owner is at/over their plan's
+        patient limit."""
+        ...

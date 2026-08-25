@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_role
 from app.db.mongo import get_db
 from app.schemas.recommendations import (
     RecommendationBulkCreate,
@@ -15,7 +15,11 @@ from ..domain.entities import Recommendation
 from ..infrastructure.mongo_recommendations_repository import MongoRecommendationsRepository
 
 
-router = APIRouter(prefix="/recommendations", tags=["recommendations"])
+router = APIRouter(
+    prefix="/recommendations",
+    tags=["recommendations"],
+    dependencies=[Depends(require_role("nutritionist"))],
+)
 
 
 def get_recommendations_service(

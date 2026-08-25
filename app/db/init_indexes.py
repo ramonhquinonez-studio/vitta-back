@@ -79,3 +79,21 @@ async def ensure_indexes() -> None:
 
     await db.google_tokens.create_index("user_id", unique=True)
     await db.google_tokens.create_index("provider", name="provider")  # opcional
+
+    # ---------- RATE LIMITING ----------
+    await db.rate_limit_events.create_index("key")
+    # TTL: events expire on their own an hour after creation, matching the
+    # longest throttle window in use — no manual cleanup job needed.
+    await db.rate_limit_events.create_index("at", expireAfterSeconds=3600)
+
+    # ---------- MESSAGING (patient <-> nutritionist chat) ----------
+    await db.messages.create_index([("owner_id", 1), ("patient_id", 1), ("created_at", 1)])
+
+    # ---------- WORKOUT PLANS ----------
+    await db.workout_plans.create_index([("owner_id", 1), ("updated_at", -1)])
+    await db.workout_plan_assignments.create_index([("owner_id", 1), ("patient_id", 1)])
+    await db.workout_plan_assignments.create_index("plan_id")
+    await db.workout_plan_assignments.create_index("patient_id")
+    await db.workout_logs.create_index([("owner_id", 1), ("patient_id", 1)])
+    await db.workout_logs.create_index([("patient_id", 1), ("workout_plan_id", 1)])
+    await db.exercise_library.create_index([("owner_id", 1), ("name", 1)])

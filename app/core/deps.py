@@ -40,3 +40,20 @@ async def get_current_user(
 
     # puedes devolver el doc completo o una versión mínima
     return {"id": str(user["_id"]), "email": user["email"], "role": user.get("role", "user")}
+
+
+def require_role(*roles: str):
+    """Dependency factory gating a route to one or more account roles (e.g.
+    "nutritionist"). `get_current_user` already decodes `role` from every
+    JWT, but until now nothing checked it — every "owner-scoped" route just
+    trusted whatever id was in the token, so a patient-role account could
+    technically call nutritionist-only endpoints. Apply as
+    `Depends(require_role("nutritionist"))` alongside `get_current_user`.
+    """
+
+    async def _check(current: dict = Depends(get_current_user)) -> dict:
+        if current.get("role") not in roles:
+            raise HTTPException(status_code=403, detail="Not allowed for this account role")
+        return current
+
+    return _check

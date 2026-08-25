@@ -150,7 +150,10 @@ class MongoAppointmentsRepository:
         current = await self.get_for_owner(owner_id, appointment_id)
         if current is None:
             return None
-        await self._db.appointments.delete_one({"_id": self._as_oid(appointment_id)})
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        await self._db.appointments.delete_one(
+            {"_id": self._as_oid(appointment_id), "owner_id": owner_oid}
+        )
         return current
 
     async def find_overlap(
@@ -183,13 +186,16 @@ class MongoAppointmentsRepository:
         doc = await self._db.patients.find_one({"_id": patient_oid, "owner_id": owner_oid})
         return doc is not None
 
-    async def set_google_event_id(self, appointment_id: str, google_event_id: str) -> Appointment | None:
+    async def set_google_event_id(
+        self, owner_id: str, appointment_id: str, google_event_id: str
+    ) -> Appointment | None:
         appointment_oid = self._as_oid(appointment_id)
+        owner_oid = self._as_oid(owner_id, field_name="owner")
         await self._db.appointments.update_one(
-            {"_id": appointment_oid},
+            {"_id": appointment_oid, "owner_id": owner_oid},
             {"$set": {"google_event_id": google_event_id}},
         )
-        doc = await self._db.appointments.find_one({"_id": appointment_oid})
+        doc = await self._db.appointments.find_one({"_id": appointment_oid, "owner_id": owner_oid})
         if doc is None:
             return None
         if isinstance(doc.get("patient_id"), ObjectId):

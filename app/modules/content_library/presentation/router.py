@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_role
 from app.db.mongo import get_db
 from app.schemas.content_library import ArticleIn, ArticleOut, ArticleUpdate
 
@@ -34,7 +34,7 @@ async def list_articles(
 
 @router.get("/articles/mine", response_model=list[ArticleOut])
 async def list_my_articles(
-    current=Depends(get_current_user),
+    current=Depends(require_role("nutritionist")),
     service: ContentLibraryService = Depends(get_content_library_service),
 ):
     return await service.list_my_articles(_owner_id(current))
@@ -43,7 +43,7 @@ async def list_my_articles(
 @router.post("/articles", response_model=ArticleOut, status_code=201)
 async def create_article(
     payload: ArticleIn,
-    current=Depends(get_current_user),
+    current=Depends(require_role("nutritionist")),
     service: ContentLibraryService = Depends(get_content_library_service),
 ):
     try:
@@ -56,7 +56,7 @@ async def create_article(
 async def update_article(
     article_id: str,
     payload: ArticleUpdate,
-    current=Depends(get_current_user),
+    current=Depends(require_role("nutritionist")),
     service: ContentLibraryService = Depends(get_content_library_service),
 ):
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
@@ -71,7 +71,7 @@ async def update_article(
 @router.delete("/articles/{article_id}")
 async def delete_article(
     article_id: str,
-    current=Depends(get_current_user),
+    current=Depends(require_role("nutritionist")),
     service: ContentLibraryService = Depends(get_content_library_service),
 ):
     try:

@@ -1,10 +1,11 @@
 from ..domain.entities import Patient
-from ..domain.repositories import PatientsRepository
+from ..domain.repositories import PatientQuotaChecker, PatientsRepository
 
 
 class PatientsService:
-    def __init__(self, repository: PatientsRepository):
+    def __init__(self, repository: PatientsRepository, quota_checker: PatientQuotaChecker | None = None):
         self._repository = repository
+        self._quota_checker = quota_checker
 
     async def list_patients(
         self,
@@ -22,6 +23,8 @@ class PatientsService:
         )
 
     async def create_patient(self, owner_id: str, payload: dict) -> Patient:
+        if self._quota_checker is not None:
+            await self._quota_checker.check(owner_id)
         return await self._repository.create_for_owner(owner_id, payload)
 
     async def get_patient(self, owner_id: str, patient_id: str) -> Patient:
@@ -67,6 +70,30 @@ class PatientsService:
             raise LookupError("Patient not found")
         return items
 
+    async def list_measurements(self, owner_id: str, patient_id: str) -> list[dict]:
+        items = await self._repository.list_measurements(owner_id, patient_id)
+        if items is None:
+            raise LookupError("Patient not found")
+        return items
+
+    async def list_checkin_responses(self, owner_id: str, patient_id: str) -> list[dict]:
+        items = await self._repository.list_checkin_responses(owner_id, patient_id)
+        if items is None:
+            raise LookupError("Patient not found")
+        return items
+
+    async def list_workout_plan_assignments(self, owner_id: str, patient_id: str) -> list[dict]:
+        items = await self._repository.list_workout_plan_assignments(owner_id, patient_id)
+        if items is None:
+            raise LookupError("Patient not found")
+        return items
+
+    async def list_workout_logs(self, owner_id: str, patient_id: str) -> list[dict]:
+        items = await self._repository.list_workout_logs(owner_id, patient_id)
+        if items is None:
+            raise LookupError("Patient not found")
+        return items
+
     async def create_invite_code(self, owner_id: str, patient_id: str | None = None) -> dict:
         if patient_id is not None:
             patient = await self._repository.get_for_owner(owner_id, patient_id)
@@ -77,6 +104,8 @@ class PatientsService:
         return await self._repository.create_invite_code(owner_id, patient_id=patient_id)
 
     async def claim_patient(self, owner_id: str, code: str) -> Patient:
+        if self._quota_checker is not None:
+            await self._quota_checker.check(owner_id)
         patient = await self._repository.claim_patient(owner_id, code)
         if patient is None:
             raise LookupError("Invalid or already-claimed connection code")

@@ -103,8 +103,8 @@ class _FakeAppointmentsRepository:
     async def patient_exists_for_owner(self, owner_id, patient_id):
         return self.patient_exists
 
-    async def set_google_event_id(self, appointment_id, google_event_id):
-        current = self.appointments.get(appointment_id)
+    async def set_google_event_id(self, owner_id, appointment_id, google_event_id):
+        current = await self.get_for_owner(owner_id, appointment_id)
         if current is None:
             return None
         updated = replace(current, google_event_id=google_event_id)
@@ -229,6 +229,55 @@ class AppointmentsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(appointment.google_event_id, "google-1")
         self.assertEqual(calendar.created, [("owner-1", "1")])
+
+    async def test_set_google_event_id_is_owner_scoped(self):
+        repository = _FakeAppointmentsRepository()
+        start = datetime.now(UTC)
+        appointment = await repository.create_for_owner(
+            "owner-1",
+            patient_id="patient-1",
+            start=start,
+            end=start + timedelta(minutes=30),
+            mode="online",
+            status="confirmed",
+            note=None,
+            plan_id=None,
+            body_composition_id=None,
+            no_sync=True,
+        )
+
+        wrong_owner_result = await repository.set_google_event_id(
+            "owner-2", appointment.id, "google-x"
+        )
+        right_owner_result = await repository.set_google_event_id(
+            "owner-1", appointment.id, "google-x"
+        )
+
+        self.assertIsNone(wrong_owner_result)
+        self.assertEqual(right_owner_result.google_event_id, "google-x")
+
+    async def test_delete_appointment_does_not_affect_another_owners_appointment(self):
+        repository = _FakeAppointmentsRepository()
+        calendar = _FakeCalendarGateway()
+        service = AppointmentsService(repository, calendar)
+        start = datetime.now(UTC)
+        appointment = await repository.create_for_owner(
+            "owner-1",
+            patient_id="patient-1",
+            start=start,
+            end=start + timedelta(minutes=30),
+            mode="online",
+            status="confirmed",
+            note=None,
+            plan_id=None,
+            body_composition_id=None,
+            no_sync=True,
+        )
+
+        with self.assertRaises(LookupError):
+            await service.delete_appointment("owner-2", appointment.id)
+
+        self.assertIn(appointment.id, repository.appointments)
 
     async def test_list_appointments_filters_by_patient_id(self):
         repository = _FakeAppointmentsRepository()

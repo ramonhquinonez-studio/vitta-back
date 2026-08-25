@@ -87,6 +87,15 @@ class _FakeAuthRepository:
         self.users_by_email[user.email] = updated
 
 
+class _FakeQuotaChecker:
+    def __init__(self, *, allow: bool):
+        self._allow = allow
+
+    async def check(self, owner_id):
+        if not self._allow:
+            raise PermissionError("Has llegado al límite de tu plan actual.")
+
+
 class AuthServiceTest(unittest.IsolatedAsyncioTestCase):
     async def test_register_creates_user_with_normalized_email(self):
         repository = _FakeAuthRepository()
@@ -158,6 +167,52 @@ class AuthServiceTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(len(repository.patients), 1)
+
+    async def test_register_rejects_when_the_new_patient_quota_checker_raises(self):
+        repository = _FakeAuthRepository()
+        repository.invite_codes["FULL2026"] = {
+            "code": "FULL2026",
+            "owner_id": "owner-1",
+            "patient_id": None,
+            "expires_at": None,
+            "used_at": None,
+        }
+        service = AuthService(repository, quota_checker=_FakeQuotaChecker(allow=False))
+
+        with self.assertRaises(PermissionError):
+            await service.register(
+                name="Maria",
+                email="maria3@email.com",
+                password="secret123",
+                invite_code="full2026",
+            )
+
+        # No orphan account left behind when the quota check fails.
+        self.assertNotIn("maria3@email.com", repository.users_by_email)
+        self.assertEqual(len(repository.patients), 0)
+
+    async def test_register_does_not_check_quota_when_linking_an_existing_patient(self):
+        repository = _FakeAuthRepository()
+        repository.patients_by_id["p1"] = {"id": "p1", "user_id": None}
+        repository.invite_codes["LINK2026"] = {
+            "code": "LINK2026",
+            "owner_id": "owner-1",
+            "patient_id": "p1",
+            "expires_at": None,
+            "used_at": None,
+        }
+        service = AuthService(repository, quota_checker=_FakeQuotaChecker(allow=False))
+
+        user = await service.register(
+            name="Maria",
+            email="maria4@email.com",
+            password="secret123",
+            invite_code="link2026",
+        )
+
+        # Linking an already-existing chart doesn't grow the roster, so it's
+        # not gated by quota even when the checker would otherwise refuse.
+        self.assertEqual(user.email, "maria4@email.com")
 
     async def test_register_without_invite_code_creates_an_unowned_patient(self):
         repository = _FakeAuthRepository()

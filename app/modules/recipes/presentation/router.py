@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_role
 from app.db.mongo import get_db
 from app.schemas.recipes import (
     RecipeCollectionCreate,
@@ -16,7 +16,11 @@ from ..domain.entities import Recipe, RecipeCollection
 from ..infrastructure.mongo_recipes_repository import MongoRecipesRepository
 
 
-router = APIRouter(prefix="/recipe_collections", tags=["recipes"])
+router = APIRouter(
+    prefix="/recipe_collections",
+    tags=["recipes"],
+    dependencies=[Depends(require_role("nutritionist"))],
+)
 
 
 def get_recipes_service(

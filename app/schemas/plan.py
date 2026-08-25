@@ -10,6 +10,22 @@ class PlanMealItem(BaseModel):
     equivalency_group_id: Optional[str] = None
     equivalency_food_id: Optional[str] = None
     equivalents: Optional[float] = None
+    kcal: Optional[float] = None
+    protein: Optional[float] = None
+    carbs: Optional[float] = None
+    fat: Optional[float] = None
+    # Whether `qty` was measured raw or already cooked (e.g. "150 g" of
+    # chicken breast could mean either) — `equivalent_qty` is the *other*
+    # state's weight, in the same `unit`, so a patient shopping/prepping
+    # sees both without needing to know a conversion ratio themselves.
+    cooking_state: Optional[Literal['raw', 'cooked']] = None
+    equivalent_qty: Optional[float] = None
+    # Grams represented by one `unit` of this specific item (e.g. "1 taza"
+    # of cooked rice vs. rolled oats vs. milk are very different weights) —
+    # sourced from a real USDA portion when the nutritionist picks one,
+    # never a generic per-unit constant. Null when `unit` is already a
+    # weight unit, or when no USDA portion was available/picked.
+    unit_gram_weight: Optional[float] = None
 
 class EatingOutOption(BaseModel):
     restaurant: str

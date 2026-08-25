@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     GOOGLE_SCOPES: list[str] = ["https://www.googleapis.com/auth/calendar"]
     APP_OAUTH_SUCCESS_REDIRECT: str = "vitta://oauth/success"
 
+    USDA_FDC_API_KEY: str = ""
+
+    BILLING_PROVIDER: str = "mock"  # "mock" | "stripe"
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PUBLISHABLE_KEY: str = ""
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, v):

@@ -43,6 +43,10 @@ class MongoPatientsRepository:
         items = [self._to_entity(doc) async for doc in cursor]
         return items, total
 
+    async def count_for_owner(self, owner_id: str) -> int:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        return await self._db.patients.count_documents({"owner_id": owner_oid})
+
     async def create_for_owner(self, owner_id: str, payload: dict) -> Patient:
         owner_oid = self._as_oid(owner_id, field_name="owner")
         document = dict(payload)
@@ -148,6 +152,94 @@ class MongoPatientsRepository:
                 "kcal": doc.get("kcal"),
                 "protein": doc.get("protein"),
                 "notes": doc.get("notes"),
+            }
+            async for doc in cursor
+        ]
+
+    async def list_measurements(self, owner_id: str, patient_id: str) -> list[dict] | None:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        patient_oid = self._as_oid(patient_id)
+        owned = await self._db.patients.find_one({"_id": patient_oid, "owner_id": owner_oid})
+        if owned is None:
+            return None
+
+        cursor = self._db.measurements.find({"patient_id": patient_oid}).sort("at", -1)
+        return [
+            {
+                "id": str(doc["_id"]),
+                "at": doc.get("at"),
+                "weight_kg": doc.get("weight_kg"),
+                "body_fat_pct": doc.get("body_fat_pct"),
+                "waist_cm": doc.get("waist_cm"),
+                "notes": doc.get("notes"),
+                "attachment_url": doc.get("attachment_url"),
+                "attachment_type": doc.get("attachment_type"),
+            }
+            async for doc in cursor
+        ]
+
+    async def list_workout_plan_assignments(self, owner_id: str, patient_id: str) -> list[dict] | None:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        patient_oid = self._as_oid(patient_id)
+        owned = await self._db.patients.find_one({"_id": patient_oid, "owner_id": owner_oid})
+        if owned is None:
+            return None
+
+        cursor = self._db.workout_plan_assignments.find({"patient_id": patient_oid}).sort(
+            "assigned_at", -1
+        )
+        results = []
+        async for doc in cursor:
+            plan = await self._db.workout_plans.find_one({"_id": doc["plan_id"]})
+            results.append(
+                {
+                    "plan_id": str(doc["plan_id"]),
+                    "plan_name": plan.get("name") if plan else None,
+                    "assigned_at": doc.get("assigned_at"),
+                }
+            )
+        return results
+
+    async def list_workout_logs(self, owner_id: str, patient_id: str) -> list[dict] | None:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        patient_oid = self._as_oid(patient_id)
+        owned = await self._db.patients.find_one({"_id": patient_oid, "owner_id": owner_oid})
+        if owned is None:
+            return None
+
+        cursor = self._db.workout_logs.find({"patient_id": patient_oid})
+        return [
+            {
+                "workout_plan_id": str(doc["workout_plan_id"]),
+                "day_index": doc["day_index"],
+                "exercise_index": doc["exercise_index"],
+                "completed_at": doc.get("completed_at"),
+                "sets_completed": doc.get("sets_completed"),
+                "reps_completed": doc.get("reps_completed"),
+                "weight_kg": doc.get("weight_kg"),
+                "rpe": doc.get("rpe"),
+                "comment": doc.get("comment"),
+            }
+            async for doc in cursor
+        ]
+
+    async def list_checkin_responses(self, owner_id: str, patient_id: str) -> list[dict] | None:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        patient_oid = self._as_oid(patient_id)
+        owned = await self._db.patients.find_one({"_id": patient_oid, "owner_id": owner_oid})
+        if owned is None:
+            return None
+
+        cursor = self._db.checkin_responses.find({"patient_id": patient_oid}).sort(
+            "submitted_at", -1
+        )
+        return [
+            {
+                "id": str(doc["_id"]),
+                "template_id": str(doc["template_id"]),
+                "appointment_id": str(doc["appointment_id"]) if doc.get("appointment_id") else None,
+                "answers": doc.get("answers", []),
+                "submitted_at": doc.get("submitted_at"),
             }
             async for doc in cursor
         ]

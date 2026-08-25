@@ -14,12 +14,13 @@ from app.core.security import (
 )
 
 from ..domain.entities import AuthTokens, AuthUser
-from ..domain.repositories import AuthRepository
+from ..domain.repositories import AuthRepository, PatientQuotaChecker
 
 
 class AuthService:
-    def __init__(self, repository: AuthRepository):
+    def __init__(self, repository: AuthRepository, quota_checker: PatientQuotaChecker | None = None):
         self._repository = repository
+        self._quota_checker = quota_checker
 
     async def register(
         self, *, name: str, email: str, password: str, invite_code: str | None = None
@@ -47,6 +48,14 @@ class AuthService:
             expires_at = invite.get("expires_at")
             if expires_at is not None and expires_at < datetime.utcnow():
                 raise LookupError("Invite code expired")
+
+        # Only an invite with no already-existing `patient_id` will create a
+        # brand-new patient below — that's the one case that actually grows
+        # the nutritionist's roster, so it's the one checked against quota.
+        # Checked before creating the user account: a failed quota check
+        # here must not leave behind an orphan account with no patient chart.
+        if invite is not None and not invite.get("patient_id") and self._quota_checker is not None:
+            await self._quota_checker.check(invite["owner_id"])
 
         user = await self._repository.create_user(
             name=normalized_name,
