@@ -28,13 +28,22 @@ class MongoMessagingRepository:
         return [self._to_entity(doc) async for doc in cursor]
 
     async def create(
-        self, owner_id: str, patient_id: str, *, sender_role: str, text: str
+        self,
+        owner_id: str,
+        patient_id: str,
+        *,
+        sender_role: str,
+        text: str,
+        attachment_url: str | None = None,
+        attachment_type: str | None = None,
     ) -> Message:
         document = {
             "owner_id": self._as_oid(owner_id, "owner"),
             "patient_id": self._as_oid(patient_id, "patient"),
             "sender_role": sender_role,
             "text": text,
+            "attachment_url": attachment_url,
+            "attachment_type": attachment_type,
             "created_at": datetime.utcnow(),
             "read_at": None,
         }
@@ -57,4 +66,6 @@ class MongoMessagingRepository:
             text=doc["text"],
             created_at=doc["created_at"],
             read_at=doc.get("read_at"),
+            attachment_url=doc.get("attachment_url"),
+            attachment_type=doc.get("attachment_type"),
         )

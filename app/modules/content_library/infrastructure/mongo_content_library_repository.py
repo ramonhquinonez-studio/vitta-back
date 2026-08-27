@@ -19,6 +19,10 @@ class MongoContentLibraryRepository:
         cursor = self._db.content_articles.find({"owner_id": owner_oid}).sort("updated_at", -1)
         return [self._to_entity(doc) async for doc in cursor]
 
+    async def list_platform_articles(self) -> list[Article]:
+        cursor = self._db.content_articles.find({"owner_id": None}).sort("order", 1)
+        return [self._to_entity(doc) async for doc in cursor]
+
     async def create_for_owner(self, owner_id: str, payload: dict) -> Article:
         owner_oid = self._as_oid(owner_id, field_name="owner")
         document = {
@@ -30,6 +34,7 @@ class MongoContentLibraryRepository:
             "emoji": payload.get("emoji") or "📖",
             "order": 0,
             "video_url": payload.get("video_url"),
+            "source_url": payload.get("source_url"),
             "sections": payload.get("sections") or [],
             "updated_at": datetime.utcnow(),
         }
@@ -79,6 +84,7 @@ class MongoContentLibraryRepository:
             ],
             owner_id=str(owner_id) if owner_id else None,
             video_url=document.get("video_url"),
+            source_url=document.get("source_url"),
         )
 
     def _as_oid(self, id_str: str, field_name: str = "id") -> ObjectId:

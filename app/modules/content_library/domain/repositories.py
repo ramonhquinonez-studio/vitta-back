@@ -10,6 +10,9 @@ class ContentLibraryRepository(Protocol):
     async def list_for_owner(self, owner_id: str) -> list[Article]:
         ...
 
+    async def list_platform_articles(self) -> list[Article]:
+        ...
+
     async def create_for_owner(self, owner_id: str, payload: dict) -> Article:
         ...
 

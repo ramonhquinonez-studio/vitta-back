@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -8,6 +9,7 @@ from app.core.quota import PatientQuotaCheckerAdapter
 from app.core.storage import save_upload
 from app.db.mongo import get_db
 from app.modules.billing.presentation.router import get_billing_service
+from app.modules.nutritionist_profile.presentation.router import get_nutritionist_profile_service
 from app.schemas.auth import InviteCodeOut
 from app.schemas.pagination import Page, PaginationParams
 from app.schemas.patients import ClaimPatientIn, PatientIn, PatientOut, PatientUpdate
@@ -50,6 +52,14 @@ def _serialize(patient: Patient) -> PatientOut:
         notes=patient.notes,
         owner_id=patient.owner_id,
         user_id=patient.user_id,
+        daily_kcal_goal=patient.daily_kcal_goal,
+        daily_protein_g_goal=patient.daily_protein_g_goal,
+        daily_carbs_g_goal=patient.daily_carbs_g_goal,
+        daily_fat_g_goal=patient.daily_fat_g_goal,
+        email=patient.email,
+        phone=patient.phone,
+        archived_at=patient.archived_at,
+        tags=patient.tags,
     )
 
 
@@ -57,6 +67,7 @@ def _serialize(patient: Patient) -> PatientOut:
 async def list_patients(
     pagination: PaginationParams = Depends(),
     q: str | None = Query(None, description="Busqueda por nombre (regex, case-insensitive)"),
+    include_archived: bool = Query(False),
     current=Depends(get_current_user),
     service: PatientsService = Depends(get_patients_service),
 ):
@@ -65,6 +76,7 @@ async def list_patients(
         page=pagination.page,
         limit=pagination.limit,
         query=q,
+        include_archived=include_archived,
     )
     return Page(
         items=[_serialize(item) for item in items],
@@ -85,6 +97,21 @@ async def create_patient(
     except PermissionError as exc:
         raise HTTPException(status_code=402, detail=str(exc)) from exc
     return _serialize(patient)
+
+
+@router.get("/dashboard", response_model=dict)
+async def get_practice_dashboard(
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+    profile_service=Depends(get_nutritionist_profile_service),
+):
+    owner_id = _owner_id(current)
+    dashboard = await service.get_dashboard(owner_id)
+    profile = await profile_service.get_my_profile(owner_id)
+    session_price = profile.get("session_price") or 0
+    dashboard["estimated_revenue_this_month"] = dashboard["completed_appointments_this_month"] * session_price
+    dashboard["revenue_currency"] = profile.get("session_price_currency") or "MXN"
+    return dashboard
 
 
 @router.post("/invite-codes", response_model=InviteCodeOut, status_code=201)
@@ -168,19 +195,55 @@ async def update_patient(
     return _serialize(patient)
 
 
-@router.delete("/{patient_id}")
-async def delete_patient(
+@router.delete("/{patient_id}", response_model=PatientOut)
+async def archive_patient(
+    patient_id: str,
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+):
+    """Soft-delete: archives the patient (excluded from the default roster
+    and dashboard) instead of removing the chart, so it can be restored via
+    `unarchive_patient` below."""
+    try:
+        patient = await service.archive_patient(_owner_id(current), patient_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _serialize(patient)
+
+
+@router.post("/{patient_id}/unarchive", response_model=PatientOut)
+async def unarchive_patient(
     patient_id: str,
     current=Depends(get_current_user),
     service: PatientsService = Depends(get_patients_service),
 ):
     try:
-        await service.delete_patient(_owner_id(current), patient_id)
+        patient = await service.unarchive_patient(_owner_id(current), patient_id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"ok": True}
+    return _serialize(patient)
+
+
+@router.post("/{patient_id}/workout-logs/toggle", response_model=dict)
+async def toggle_patient_workout_log(
+    patient_id: str,
+    payload: dict[str, Any],
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+):
+    """Lets the nutritionist mark a client's exercise done on their behalf
+    (e.g. during an in-person session) — mirrors the patient-facing
+    `POST /me/workout-logs/toggle`, scoped to a patient this owner has."""
+    try:
+        return await service.toggle_workout_log(_owner_id(current), patient_id, payload)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/{patient_id}/body_compositions", response_model=dict, status_code=201)

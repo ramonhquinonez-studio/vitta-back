@@ -38,6 +38,10 @@ class MongoMeRepository:
             # Only present (non-null) while self-registered and unclaimed —
             # cleared the moment a nutritionist redeems it.
             "connection_code": patient.get("connection_code"),
+            "daily_kcal_goal": patient.get("daily_kcal_goal"),
+            "daily_protein_g_goal": patient.get("daily_protein_g_goal"),
+            "daily_carbs_g_goal": patient.get("daily_carbs_g_goal"),
+            "daily_fat_g_goal": patient.get("daily_fat_g_goal"),
         }
 
     async def update_patient_profile(self, patient_id: str, payload: dict) -> dict | None:
@@ -312,6 +316,7 @@ class MongoMeRepository:
             "sections": document.get("sections") or [],
             "owner_id": str(document["owner_id"]) if document.get("owner_id") else None,
             "video_url": document.get("video_url"),
+            "source_url": document.get("source_url"),
         }
 
     async def get_nutritionist_profile(self, owner_id: str | None) -> dict | None:
@@ -533,7 +538,15 @@ class MongoMeRepository:
         cursor = self._db.messages.find(filt).sort("created_at", 1)
         return [self._serialize_message(doc) async for doc in cursor]
 
-    async def create_message(self, owner_id: str | None, patient_id: str, *, text: str) -> dict:
+    async def create_message(
+        self,
+        owner_id: str | None,
+        patient_id: str,
+        *,
+        text: str,
+        attachment_url: str | None = None,
+        attachment_type: str | None = None,
+    ) -> dict:
         if owner_id is None:
             raise LookupError("No nutritionist assigned yet")
         document = {
@@ -541,6 +554,8 @@ class MongoMeRepository:
             "patient_id": self._as_oid(patient_id),
             "sender_role": "patient",
             "text": text,
+            "attachment_url": attachment_url,
+            "attachment_type": attachment_type,
             "created_at": datetime.utcnow(),
             "read_at": None,
         }
@@ -555,6 +570,8 @@ class MongoMeRepository:
             "text": doc.get("text"),
             "created_at": doc.get("created_at"),
             "read_at": doc.get("read_at"),
+            "attachment_url": doc.get("attachment_url"),
+            "attachment_type": doc.get("attachment_type"),
         }
 
     async def list_checkin_templates(self, owner_id: str) -> list[dict]:
@@ -656,7 +673,7 @@ class MongoMeRepository:
         cursor = self._db.workout_logs.find(filt)
         return [self._serialize_workout_log(doc) async for doc in cursor]
 
-    async def toggle_workout_log(
+    async def upsert_workout_log(
         self,
         *,
         owner_id: str,
@@ -664,7 +681,10 @@ class MongoMeRepository:
         workout_plan_id: str,
         day_index: int,
         exercise_index: int,
-        details: dict | None = None,
+        sets: list[dict],
+        comment: str | None = None,
+        photo_url: str | None = None,
+        photo_content_type: str | None = None,
     ) -> dict:
         key = {
             "owner_id": self._as_oid(owner_id),
@@ -673,34 +693,34 @@ class MongoMeRepository:
             "day_index": day_index,
             "exercise_index": exercise_index,
         }
-        existing = await self._db.workout_logs.find_one(key)
-        if existing is not None:
-            await self._db.workout_logs.delete_one({"_id": existing["_id"]})
-            return {"completed": False}
-        details = details or {}
-        document = {
-            **key,
-            "completed_at": datetime.utcnow(),
-            "sets_completed": details.get("sets_completed"),
-            "reps_completed": details.get("reps_completed"),
-            "weight_kg": details.get("weight_kg"),
-            "rpe": details.get("rpe"),
-            "comment": details.get("comment"),
-        }
-        await self._db.workout_logs.insert_one(document)
-        return {"completed": True}
+        await self._db.workout_logs.update_one(
+            key,
+            {
+                "$set": {
+                    "sets": sets,
+                    "comment": comment,
+                    "photo_url": photo_url,
+                    "photo_content_type": photo_content_type,
+                    "updated_at": datetime.utcnow(),
+                },
+                "$setOnInsert": {"coach_marked_done": False},
+            },
+            upsert=True,
+        )
+        doc = await self._db.workout_logs.find_one(key)
+        return self._serialize_workout_log(doc)
 
     def _serialize_workout_log(self, doc: dict) -> dict:
         return {
             "workout_plan_id": str(doc["workout_plan_id"]),
             "day_index": doc["day_index"],
             "exercise_index": doc["exercise_index"],
-            "completed_at": doc.get("completed_at"),
-            "sets_completed": doc.get("sets_completed"),
-            "reps_completed": doc.get("reps_completed"),
-            "weight_kg": doc.get("weight_kg"),
-            "rpe": doc.get("rpe"),
+            "sets": doc.get("sets", []),
             "comment": doc.get("comment"),
+            "photo_url": doc.get("photo_url"),
+            "photo_content_type": doc.get("photo_content_type"),
+            "coach_marked_done": doc.get("coach_marked_done", False),
+            "updated_at": doc.get("updated_at"),
         }
 
     def _serialize_appointment(self, doc: dict) -> dict:

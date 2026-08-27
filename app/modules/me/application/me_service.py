@@ -353,14 +353,27 @@ class MeService:
         reaching into the service's repository directly."""
         return await self._repository.get_patient_for_user(user_id)
 
-    async def send_message(self, user_id: str, text: str) -> dict:
+    async def send_message(
+        self,
+        user_id: str,
+        text: str,
+        *,
+        attachment_url: str | None = None,
+        attachment_type: str | None = None,
+    ) -> dict:
         text = (text or "").strip()
-        if not text:
-            raise ValueError("text is required")
+        if not text and not attachment_url:
+            raise ValueError("text or attachment_url is required")
         patient = await self._require_patient(user_id)
         if not patient.get("owner_id"):
             raise LookupError("No tienes un nutriólogo asignado todavía")
-        return await self._repository.create_message(patient.get("owner_id"), patient["id"], text=text)
+        return await self._repository.create_message(
+            patient.get("owner_id"),
+            patient["id"],
+            text=text,
+            attachment_url=attachment_url,
+            attachment_type=attachment_type,
+        )
 
     async def list_checkin_templates(self, user_id: str) -> list[dict]:
         patient = await self._repository.get_patient_for_user(user_id)
@@ -415,25 +428,21 @@ class MeService:
             patient["id"], workout_plan_id=workout_plan_id
         )
 
-    async def toggle_workout_log(self, user_id: str, payload: dict) -> dict:
+    async def upsert_workout_log(self, user_id: str, payload) -> dict:
         patient = await self._require_patient(user_id)
         owner_id = patient.get("owner_id")
         if not owner_id:
             raise LookupError("No tienes un nutriólogo asignado todavía")
-        workout_plan_id = payload.get("workout_plan_id")
-        if not workout_plan_id:
-            raise ValueError("workout_plan_id is required")
-        day_index = payload.get("day_index")
-        exercise_index = payload.get("exercise_index")
-        if day_index is None or exercise_index is None:
-            raise ValueError("day_index and exercise_index are required")
-        return await self._repository.toggle_workout_log(
+        return await self._repository.upsert_workout_log(
             owner_id=owner_id,
             patient_id=patient["id"],
-            workout_plan_id=workout_plan_id,
-            day_index=day_index,
-            exercise_index=exercise_index,
-            details=payload.get("details"),
+            workout_plan_id=payload.workout_plan_id,
+            day_index=payload.day_index,
+            exercise_index=payload.exercise_index,
+            sets=[s.model_dump() for s in payload.sets],
+            comment=payload.comment,
+            photo_url=payload.photo_url,
+            photo_content_type=payload.photo_content_type,
         )
 
     async def _require_patient(self, user_id: str) -> dict:

@@ -20,6 +20,7 @@ class ArticleOut(BaseModel):
     sections: list[ArticleSectionOut]
     owner_id: Optional[str] = None
     video_url: Optional[str] = None
+    source_url: Optional[str] = None
 
 
 class ArticleSectionIn(BaseModel):
@@ -35,6 +36,7 @@ class ArticleIn(BaseModel):
     read_time: Optional[str] = Field(None, max_length=20)
     emoji: Optional[str] = Field(None, max_length=8)
     video_url: Optional[str] = None
+    source_url: Optional[str] = None
     sections: list[ArticleSectionIn] = []
 
 
@@ -45,4 +47,5 @@ class ArticleUpdate(BaseModel):
     read_time: Optional[str] = Field(None, max_length=20)
     emoji: Optional[str] = Field(None, max_length=8)
     video_url: Optional[str] = None
+    source_url: Optional[str] = None
     sections: Optional[list[ArticleSectionIn]] = None

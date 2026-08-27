@@ -17,6 +17,7 @@ async def ensure_indexes() -> None:
     await db.patients.create_index([("owner_id", 1), ("name", 1)])
     await db.patients.create_index("email")
     await db.patients.create_index("user_id")  # vínculo paciente-usuario
+    await db.patients.create_index([("owner_id", 1), ("created_at", -1)])
 
     # ---------- APPOINTMENTS ----------
     # Consultas comunes: por paciente, por estado y por fecha
@@ -97,3 +98,6 @@ async def ensure_indexes() -> None:
     await db.workout_logs.create_index([("owner_id", 1), ("patient_id", 1)])
     await db.workout_logs.create_index([("patient_id", 1), ("workout_plan_id", 1)])
     await db.exercise_library.create_index([("owner_id", 1), ("name", 1)])
+
+    # ---------- CHECK-IN RESPONSES ----------
+    await db.checkin_responses.create_index([("patient_id", 1), ("submitted_at", -1)])

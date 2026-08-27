@@ -1,11 +1,12 @@
 from datetime import datetime
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.deps import get_current_user, get_db, require_role
 from app.core.notify import send_push_to_tokens
+from app.core.storage import save_upload
 from app.schemas.messaging import MessageIn, MessageOut
 
 from ..application.messaging_service import MessagingService
@@ -36,6 +37,8 @@ def _serialize(message) -> MessageOut:
         text=message.text,
         created_at=message.created_at,
         read_at=message.read_at,
+        attachment_url=message.attachment_url,
+        attachment_type=message.attachment_type,
     )
 
 
@@ -62,7 +65,13 @@ async def send_message(
     service: MessagingService = Depends(get_messaging_service),
 ):
     try:
-        message = await service.send_from_nutritionist(_owner_id(current), patient_id, payload.text)
+        message = await service.send_from_nutritionist(
+            _owner_id(current),
+            patient_id,
+            payload.text,
+            attachment_url=payload.attachment_url,
+            attachment_type=payload.attachment_type,
+        )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -79,8 +88,34 @@ async def send_message(
         send_push_to_tokens(
             tokens,
             "Nuevo mensaje de tu nutriólogo",
-            payload.text[:120],
+            payload.text[:120] or "Foto",
             {"type": "chat_message", "patientId": patient_id},
         )
 
     return _serialize(message)
+
+
+@router.post("/{patient_id}/messages/attachment", response_model=dict)
+async def upload_message_attachment(
+    patient_id: str,
+    file: UploadFile = File(...),
+    current=Depends(get_current_user),
+):
+    content_type = file.content_type or ""
+    allowed = (
+        content_type.startswith("image/")
+        or content_type.startswith("video/")
+        or content_type == "application/pdf"
+    )
+    if not allowed:
+        raise HTTPException(status_code=400, detail="El archivo debe ser una imagen, video o PDF.")
+    owner_id = _owner_id(current)
+    try:
+        attachment_url, saved_content_type = await save_upload(
+            file,
+            subfolder=f"messaging/{owner_id}/{patient_id}",
+            max_size_bytes=25 * 1024 * 1024,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    return {"attachment_url": attachment_url, "content_type": saved_content_type}

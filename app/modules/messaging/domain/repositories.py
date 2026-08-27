@@ -11,7 +11,14 @@ class MessagingRepository(Protocol):
         ...
 
     async def create(
-        self, owner_id: str, patient_id: str, *, sender_role: str, text: str
+        self,
+        owner_id: str,
+        patient_id: str,
+        *,
+        sender_role: str,
+        text: str,
+        attachment_url: str | None = None,
+        attachment_type: str | None = None,
     ) -> Message:
         ...
 

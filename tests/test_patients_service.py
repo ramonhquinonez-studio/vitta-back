@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime
 
 from app.modules.patients.application.patients_service import PatientsService
 from app.modules.patients.domain.entities import Patient
@@ -18,9 +19,13 @@ class _FakePatientsRepository:
         self.invite_sequence = 0
         self.last_invite_patient_id = "unset"
         self.connection_codes: dict[str, str] = {}
+        self.dashboard_data: dict = {}
+        self.workout_logs_by_key: dict[tuple, bool] = {}
 
-    async def list_for_owner(self, owner_id, *, page, limit, query=None):
+    async def list_for_owner(self, owner_id, *, page, limit, query=None, include_archived=False):
         items = [p for p in self.patients.values() if p.owner_id == owner_id]
+        if not include_archived:
+            items = [p for p in items if p.archived_at is None]
         if query:
             items = [p for p in items if query.lower() in p.name.lower()]
         return items[:limit], len(items)
@@ -35,7 +40,10 @@ class _FakePatientsRepository:
             height_cm=payload.get("height_cm"),
             allergies=list(payload.get("allergies") or []),
             notes=payload.get("notes"),
+            tags=list(payload.get("tags") or []),
             user_id=payload.get("user_id"),
+            email=payload.get("email"),
+            phone=payload.get("phone"),
         )
         self.patients[patient.id] = patient
         self.sequence += 1
@@ -60,16 +68,35 @@ class _FakePatientsRepository:
             height_cm=payload.get("height_cm", current.height_cm),
             allergies=payload.get("allergies", current.allergies),
             notes=payload.get("notes", current.notes),
+            tags=payload.get("tags", current.tags),
+            daily_kcal_goal=payload.get("daily_kcal_goal", current.daily_kcal_goal),
+            daily_protein_g_goal=payload.get(
+                "daily_protein_g_goal", current.daily_protein_g_goal
+            ),
+            daily_carbs_g_goal=payload.get("daily_carbs_g_goal", current.daily_carbs_g_goal),
+            daily_fat_g_goal=payload.get("daily_fat_g_goal", current.daily_fat_g_goal),
+            email=payload.get("email", current.email),
+            phone=payload.get("phone", current.phone),
+            archived_at=current.archived_at,
         )
         self.patients[patient_id] = updated
         return updated
 
-    async def delete_for_owner(self, owner_id, patient_id):
-        patient = await self.get_for_owner(owner_id, patient_id)
-        if patient is None:
-            return False
-        del self.patients[patient_id]
-        return True
+    async def archive_for_owner(self, owner_id, patient_id):
+        current = await self.get_for_owner(owner_id, patient_id)
+        if current is None:
+            return None
+        updated = Patient(**{**current.__dict__, "archived_at": datetime.utcnow()})
+        self.patients[patient_id] = updated
+        return updated
+
+    async def unarchive_for_owner(self, owner_id, patient_id):
+        current = await self.get_for_owner(owner_id, patient_id)
+        if current is None:
+            return None
+        updated = Patient(**{**current.__dict__, "archived_at": None})
+        self.patients[patient_id] = updated
+        return updated
 
     async def list_body_compositions(self, owner_id, patient_id):
         patient = await self.get_for_owner(owner_id, patient_id)
@@ -112,6 +139,20 @@ class _FakePatientsRepository:
         if patient is None:
             return None
         return self.workout_logs.get(patient_id, [])
+
+    async def get_dashboard(self, owner_id):
+        return self.dashboard_data
+
+    async def toggle_coach_workout_log(
+        self, owner_id, patient_id, *, workout_plan_id, day_index, exercise_index
+    ):
+        patient = await self.get_for_owner(owner_id, patient_id)
+        if patient is None:
+            return None
+        key = (patient_id, workout_plan_id, day_index, exercise_index)
+        new_value = not self.workout_logs_by_key.get(key, False)
+        self.workout_logs_by_key[key] = new_value
+        return {"completed": new_value}
 
     async def create_invite_code(self, owner_id, patient_id=None):
         self.invite_sequence += 1
@@ -180,6 +221,21 @@ class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(ValueError):
             await service.update_patient("owner-1", "1", {})
+
+    async def test_update_patient_sets_daily_nutrition_goals(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+
+        updated = await service.update_patient(
+            "owner-1",
+            patient.id,
+            {"daily_kcal_goal": 1800, "daily_protein_g_goal": 120},
+        )
+
+        self.assertEqual(updated.daily_kcal_goal, 1800)
+        self.assertEqual(updated.daily_protein_g_goal, 120)
+        self.assertIsNone(updated.daily_carbs_g_goal)
 
     async def test_list_body_compositions_returns_the_patients_scans(self):
         repository = _FakePatientsRepository()
@@ -320,6 +376,23 @@ class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(result), 1)
 
+    async def test_get_dashboard_delegates_to_the_repository(self):
+        repository = _FakePatientsRepository()
+        repository.dashboard_data = {
+            "total_patients": 5,
+            "new_patients_this_month": 2,
+            "upcoming_appointments_this_week": 3,
+            "completed_appointments_this_month": 4,
+            "active_patients": 4,
+            "inactive_patients": [{"id": "p1", "name": "Juan"}],
+        }
+        service = PatientsService(repository)
+
+        result = await service.get_dashboard("owner-1")
+
+        self.assertEqual(result["total_patients"], 5)
+        self.assertEqual(result["inactive_patients"], [{"id": "p1", "name": "Juan"}])
+
     async def test_create_invite_code_without_a_patient_id_delegates_directly(self):
         repository = _FakePatientsRepository()
         service = PatientsService(repository)
@@ -410,3 +483,93 @@ class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
             await service.claim_patient("owner-1", "SOLO2026")
 
         self.assertIn("SOLO2026", repository.connection_codes)
+
+    async def test_create_patient_stores_email_and_phone(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+
+        patient = await service.create_patient(
+            "owner-1", {"name": "Maria", "email": "maria@example.com", "phone": "555-1234"}
+        )
+
+        self.assertEqual(patient.email, "maria@example.com")
+        self.assertEqual(patient.phone, "555-1234")
+
+    async def test_create_and_update_patient_round_trip_tags(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+
+        patient = await service.create_patient(
+            "owner-1", {"name": "Maria", "tags": ["VIP", "Grupo A"]}
+        )
+        self.assertEqual(patient.tags, ["VIP", "Grupo A"])
+
+        updated = await service.update_patient("owner-1", patient.id, {"tags": ["VIP"]})
+        self.assertEqual(updated.tags, ["VIP"])
+
+    async def test_archive_patient_sets_archived_at_and_hides_from_default_list(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+
+        archived = await service.archive_patient("owner-1", patient.id)
+        self.assertIsNotNone(archived.archived_at)
+
+        items, total = await service.list_patients("owner-1", page=1, limit=20)
+        self.assertEqual(total, 0)
+
+        items, total = await service.list_patients(
+            "owner-1", page=1, limit=20, include_archived=True
+        )
+        self.assertEqual(total, 1)
+
+    async def test_archive_patient_rejects_a_patient_not_owned(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+
+        with self.assertRaises(LookupError):
+            await service.archive_patient("owner-2", patient.id)
+
+    async def test_unarchive_patient_restores_default_visibility(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+        await service.archive_patient("owner-1", patient.id)
+
+        restored = await service.unarchive_patient("owner-1", patient.id)
+        self.assertIsNone(restored.archived_at)
+
+        items, total = await service.list_patients("owner-1", page=1, limit=20)
+        self.assertEqual(total, 1)
+
+    async def test_toggle_workout_log_marks_and_unmarks_an_exercise(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+        payload = {"workout_plan_id": "wp1", "day_index": 0, "exercise_index": 1}
+
+        first = await service.toggle_workout_log("owner-1", patient.id, payload)
+        self.assertTrue(first["completed"])
+
+        second = await service.toggle_workout_log("owner-1", patient.id, payload)
+        self.assertFalse(second["completed"])
+
+    async def test_toggle_workout_log_requires_day_and_exercise_index(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+
+        with self.assertRaises(ValueError):
+            await service.toggle_workout_log(
+                "owner-1", patient.id, {"workout_plan_id": "wp1"}
+            )
+
+    async def test_toggle_workout_log_rejects_a_patient_not_owned(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+        payload = {"workout_plan_id": "wp1", "day_index": 0, "exercise_index": 0}
+
+        with self.assertRaises(LookupError):
+            await service.toggle_workout_log("owner-2", patient.id, payload)

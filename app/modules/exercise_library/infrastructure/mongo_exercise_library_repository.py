@@ -12,6 +12,21 @@ class MongoExerciseLibraryRepository:
         ).sort("name", 1)
         return [self._serialize(doc) async for doc in cursor]
 
+    async def list_platform_items(self) -> list[dict]:
+        cursor = self._db.exercise_library.find({"owner_id": None}).sort("name", 1)
+        return [self._serialize(doc) async for doc in cursor]
+
+    async def get_platform_item(self, item_id: str) -> dict | None:
+        # Platform items keep MuscleWiki's own id as a stable string `_id`
+        # (e.g. "musclewiki-123"), not an ObjectId — no `_as_oid` here.
+        doc = await self._db.exercise_library.find_one({"_id": item_id, "owner_id": None})
+        return self._serialize(doc) if doc else None
+
+    async def update_platform_item_video_url(self, item_id: str, video_url: str) -> None:
+        await self._db.exercise_library.update_one(
+            {"_id": item_id, "owner_id": None}, {"$set": {"video_url": video_url}}
+        )
+
     async def create_for_owner(self, owner_id: str, payload: dict) -> dict:
         document = {
             "owner_id": self._as_oid(owner_id, field_name="owner"),

@@ -40,6 +40,18 @@ async def list_my_articles(
     return await service.list_my_articles(_owner_id(current))
 
 
+@router.get("/articles/platform", response_model=list[ArticleOut])
+async def list_platform_articles(
+    current=Depends(require_role("nutritionist")),
+    service: ContentLibraryService = Depends(get_content_library_service),
+):
+    """Platform-curated articles (`owner_id: None`) any nutritionist can
+    browse — the "Biblioteca pública" tab, separate from their own authored
+    articles and from the unfiltered `GET /articles` (which is not safe to
+    reuse here — it returns every nutritionist's private articles too)."""
+    return await service.list_platform_articles()
+
+
 @router.post("/articles", response_model=ArticleOut, status_code=201)
 async def create_article(
     payload: ArticleIn,

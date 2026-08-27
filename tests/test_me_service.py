@@ -2,6 +2,7 @@ import unittest
 from datetime import UTC, datetime, timedelta
 
 from app.modules.me.application.me_service import MeService, parse_range
+from app.schemas.workout_log import WorkoutExerciseLogIn, WorkoutSetLogIn
 
 
 class _FakeMeRepository:
@@ -27,7 +28,7 @@ class _FakeMeRepository:
         self.checkin_response_sequence = 1
         self.active_workout_plan = None
         self.workout_logs = []
-        self.last_toggle_kwargs = None
+        self.last_upsert_kwargs = None
 
     async def get_user(self, user_id):
         return {"id": user_id, "email": "maria@email.com", "name": "Maria"}
@@ -163,7 +164,9 @@ class _FakeMeRepository:
             items = [m for m in items if m["created_at"] > since]
         return items
 
-    async def create_message(self, owner_id, patient_id, *, text):
+    async def create_message(
+        self, owner_id, patient_id, *, text, attachment_url=None, attachment_type=None
+    ):
         if owner_id is None:
             raise LookupError("No nutritionist assigned yet")
         message = {
@@ -172,6 +175,8 @@ class _FakeMeRepository:
             "text": text,
             "created_at": datetime.now(UTC),
             "read_at": None,
+            "attachment_url": attachment_url,
+            "attachment_type": attachment_type,
         }
         self.message_sequence += 1
         self.messages.append(message)
@@ -214,16 +219,29 @@ class _FakeMeRepository:
             items = [w for w in items if w["workout_plan_id"] == workout_plan_id]
         return items
 
-    async def toggle_workout_log(
-        self, *, owner_id, patient_id, workout_plan_id, day_index, exercise_index, details=None
+    async def upsert_workout_log(
+        self,
+        *,
+        owner_id,
+        patient_id,
+        workout_plan_id,
+        day_index,
+        exercise_index,
+        sets,
+        comment=None,
+        photo_url=None,
+        photo_content_type=None,
     ):
-        self.last_toggle_kwargs = {
+        self.last_upsert_kwargs = {
             "owner_id": owner_id,
             "patient_id": patient_id,
             "workout_plan_id": workout_plan_id,
             "day_index": day_index,
             "exercise_index": exercise_index,
-            "details": details,
+            "sets": sets,
+            "comment": comment,
+            "photo_url": photo_url,
+            "photo_content_type": photo_content_type,
         }
         key = (workout_plan_id, day_index, exercise_index)
         existing = next(
@@ -236,22 +254,19 @@ class _FakeMeRepository:
         )
         if existing is not None:
             self.workout_logs.remove(existing)
-            return {"completed": False}
-        details = details or {}
-        self.workout_logs.append(
-            {
-                "workout_plan_id": workout_plan_id,
-                "day_index": day_index,
-                "exercise_index": exercise_index,
-                "completed_at": datetime.now(UTC),
-                "sets_completed": details.get("sets_completed"),
-                "reps_completed": details.get("reps_completed"),
-                "weight_kg": details.get("weight_kg"),
-                "rpe": details.get("rpe"),
-                "comment": details.get("comment"),
-            }
-        )
-        return {"completed": True}
+        document = {
+            "workout_plan_id": workout_plan_id,
+            "day_index": day_index,
+            "exercise_index": exercise_index,
+            "sets": sets,
+            "comment": comment,
+            "photo_url": photo_url,
+            "photo_content_type": photo_content_type,
+            "coach_marked_done": existing.get("coach_marked_done", False) if existing else False,
+            "updated_at": datetime.now(UTC),
+        }
+        self.workout_logs.append(document)
+        return document
 
 
 class MeServiceTest(unittest.IsolatedAsyncioTestCase):
@@ -487,6 +502,20 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await service.send_message("user-1", "   ")
 
+    async def test_send_message_allows_an_attachment_with_no_text(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+
+        message = await service.send_message(
+            "user-1",
+            "",
+            attachment_url="/uploads/messaging/owner-1/patient-1/photo.jpg",
+            attachment_type="image/jpeg",
+        )
+
+        self.assertEqual(message["text"], "")
+        self.assertEqual(message["attachment_url"], "/uploads/messaging/owner-1/patient-1/photo.jpg")
+
     async def test_send_message_rejects_a_patient_without_a_nutritionist(self):
         repository = _FakeMeRepository()
         repository.patient["owner_id"] = None
@@ -611,55 +640,62 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(result)
 
-    async def test_toggle_workout_log_marks_an_exercise_complete_then_incomplete(self):
+    async def test_upsert_workout_log_persists_a_sets_list(self):
         repository = _FakeMeRepository()
         service = MeService(repository)
-        payload = {"workout_plan_id": "wp1", "day_index": 0, "exercise_index": 0}
+        payload = WorkoutExerciseLogIn(
+            workout_plan_id="wp1",
+            day_index=0,
+            exercise_index=0,
+            sets=[WorkoutSetLogIn(set_index=0, reps_completed=10, weight_kg=42.5, rpe=8)],
+            comment="Se sintió bien",
+        )
 
-        first = await service.toggle_workout_log("user-1", payload)
-        second = await service.toggle_workout_log("user-1", payload)
+        result = await service.upsert_workout_log("user-1", payload)
 
-        self.assertEqual(first, {"completed": True})
-        self.assertEqual(second, {"completed": False})
-        self.assertEqual(repository.last_toggle_kwargs["owner_id"], "owner-1")
+        self.assertEqual(result["sets"][0]["weight_kg"], 42.5)
+        self.assertEqual(result["sets"][0]["rpe"], 8)
+        self.assertEqual(result["comment"], "Se sintió bien")
+        self.assertEqual(repository.last_upsert_kwargs["owner_id"], "owner-1")
 
-    async def test_toggle_workout_log_persists_logged_performance_details(self):
+    async def test_upsert_workout_log_replaces_the_sets_list_on_a_second_call(self):
         repository = _FakeMeRepository()
         service = MeService(repository)
-        payload = {
-            "workout_plan_id": "wp1",
-            "day_index": 0,
-            "exercise_index": 0,
-            "details": {"sets_completed": 4, "reps_completed": 10, "weight_kg": 42.5, "rpe": 8, "comment": "Se sintió bien"},
-        }
+        first_payload = WorkoutExerciseLogIn(
+            workout_plan_id="wp1",
+            day_index=0,
+            exercise_index=0,
+            sets=[WorkoutSetLogIn(set_index=0, reps_completed=10, weight_kg=40)],
+        )
+        second_payload = WorkoutExerciseLogIn(
+            workout_plan_id="wp1",
+            day_index=0,
+            exercise_index=0,
+            sets=[
+                WorkoutSetLogIn(set_index=0, reps_completed=10, weight_kg=40),
+                WorkoutSetLogIn(set_index=1, reps_completed=8, weight_kg=45),
+            ],
+        )
 
-        result = await service.toggle_workout_log("user-1", payload)
+        await service.upsert_workout_log("user-1", first_payload)
+        await service.upsert_workout_log("user-1", second_payload)
 
-        self.assertEqual(result, {"completed": True})
-        self.assertEqual(repository.workout_logs[0]["weight_kg"], 42.5)
-        self.assertEqual(repository.workout_logs[0]["rpe"], 8)
-        self.assertEqual(repository.workout_logs[0]["comment"], "Se sintió bien")
+        self.assertEqual(len(repository.workout_logs), 1)
+        self.assertEqual(len(repository.workout_logs[0]["sets"]), 2)
 
-    async def test_toggle_workout_log_requires_a_workout_plan_id(self):
-        repository = _FakeMeRepository()
-        service = MeService(repository)
-
-        with self.assertRaises(ValueError):
-            await service.toggle_workout_log("user-1", {"day_index": 0, "exercise_index": 0})
-
-    async def test_toggle_workout_log_rejects_a_patient_without_a_nutritionist(self):
+    async def test_upsert_workout_log_rejects_a_patient_without_a_nutritionist(self):
         repository = _FakeMeRepository()
         repository.patient["owner_id"] = None
         service = MeService(repository)
-        payload = {"workout_plan_id": "wp1", "day_index": 0, "exercise_index": 0}
+        payload = WorkoutExerciseLogIn(workout_plan_id="wp1", day_index=0, exercise_index=0)
 
         with self.assertRaises(LookupError):
-            await service.toggle_workout_log("user-1", payload)
+            await service.upsert_workout_log("user-1", payload)
 
     async def test_list_workout_logs_returns_the_patients_own_logs(self):
         repository = _FakeMeRepository()
         repository.workout_logs = [
-            {"workout_plan_id": "wp1", "day_index": 0, "exercise_index": 0, "completed_at": datetime.now(UTC)}
+            {"workout_plan_id": "wp1", "day_index": 0, "exercise_index": 0, "sets": [], "updated_at": datetime.now(UTC)}
         ]
         service = MeService(repository)
 

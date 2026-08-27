@@ -19,7 +19,9 @@ class _FakeMessagingRepository:
             items = [m for m in items if m.created_at > since]
         return items
 
-    async def create(self, owner_id, patient_id, *, sender_role, text):
+    async def create(
+        self, owner_id, patient_id, *, sender_role, text, attachment_url=None, attachment_type=None
+    ):
         message = Message(
             id=str(self.sequence),
             owner_id=owner_id,
@@ -27,6 +29,8 @@ class _FakeMessagingRepository:
             sender_role=sender_role,
             text=text,
             created_at=datetime.utcnow(),
+            attachment_url=attachment_url,
+            attachment_type=attachment_type,
         )
         self.sequence += 1
         self.messages.append(message)
@@ -52,6 +56,21 @@ class MessagingServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(ValueError):
             await service.send_from_nutritionist("owner-1", "patient-1", "   ")
+
+    async def test_send_from_nutritionist_allows_an_attachment_with_no_text(self):
+        repo = _FakeMessagingRepository()
+        service = MessagingService(repo)
+
+        message = await service.send_from_nutritionist(
+            "owner-1",
+            "patient-1",
+            "",
+            attachment_url="/uploads/messaging/owner-1/patient-1/photo.jpg",
+            attachment_type="image/jpeg",
+        )
+
+        self.assertEqual(message.text, "")
+        self.assertEqual(message.attachment_url, "/uploads/messaging/owner-1/patient-1/photo.jpg")
 
     async def test_send_from_nutritionist_rejects_a_patient_not_owned(self):
         repo = _FakeMessagingRepository()

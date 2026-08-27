@@ -11,6 +11,7 @@ class PatientsRepository(Protocol):
         page: int,
         limit: int,
         query: str | None = None,
+        include_archived: bool = False,
     ) -> tuple[list[Patient], int]:
         ...
 
@@ -23,7 +24,10 @@ class PatientsRepository(Protocol):
     async def update_for_owner(self, owner_id: str, patient_id: str, payload: dict) -> Patient | None:
         ...
 
-    async def delete_for_owner(self, owner_id: str, patient_id: str) -> bool:
+    async def archive_for_owner(self, owner_id: str, patient_id: str) -> Patient | None:
+        ...
+
+    async def unarchive_for_owner(self, owner_id: str, patient_id: str) -> Patient | None:
         ...
 
     async def add_body_composition(self, owner_id: str, patient_id: str, payload: dict) -> dict | None:
@@ -50,6 +54,17 @@ class PatientsRepository(Protocol):
     async def list_workout_logs(self, owner_id: str, patient_id: str) -> list[dict] | None:
         ...
 
+    async def toggle_coach_workout_log(
+        self,
+        owner_id: str,
+        patient_id: str,
+        *,
+        workout_plan_id: str,
+        day_index: int,
+        exercise_index: int,
+    ) -> dict | None:
+        ...
+
     async def create_invite_code(self, owner_id: str, patient_id: str | None = None) -> dict:
         ...
 
@@ -57,6 +72,9 @@ class PatientsRepository(Protocol):
         ...
 
     async def count_for_owner(self, owner_id: str) -> int:
+        ...
+
+    async def get_dashboard(self, owner_id: str) -> dict:
         ...
 
 

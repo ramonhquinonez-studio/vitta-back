@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     APP_OAUTH_SUCCESS_REDIRECT: str = "vitta://oauth/success"
 
     USDA_FDC_API_KEY: str = ""
+    WORKOUTX_API_KEY: str = ""
 
     BILLING_PROVIDER: str = "mock"  # "mock" | "stripe"
     STRIPE_SECRET_KEY: str = ""

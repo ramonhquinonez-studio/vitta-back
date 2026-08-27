@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.deps import get_current_user, require_role
@@ -34,6 +34,35 @@ async def list_exercise_library(
     service: ExerciseLibraryService = Depends(get_exercise_library_service),
 ):
     return await service.list_items(_owner_id(current))
+
+
+@router.get("/platform", response_model=list[ExerciseLibraryItemOut])
+async def list_platform_exercise_library(
+    current=Depends(get_current_user),
+    service: ExerciseLibraryService = Depends(get_exercise_library_service),
+):
+    """Platform-curated exercises (licensed content, `owner_id: None`) any
+    nutritionist can browse — the "Biblioteca pública" tab, separate from
+    their own saved items."""
+    return await service.list_platform_items()
+
+
+@router.get("/platform/{item_id}/video-url", response_model=dict)
+async def get_platform_exercise_video_url(
+    item_id: str,
+    request: Request,
+    current=Depends(get_current_user),
+    service: ExerciseLibraryService = Depends(get_exercise_library_service),
+):
+    """Returns a playable GIF URL for a platform exercise, caching it from
+    WorkoutX into our own `/uploads` storage on first request (their GIFs
+    need our API key on every fetch, so serving our own cached copy keeps
+    us far under the free tier's monthly call quota)."""
+    try:
+        relative_url = await service.get_platform_video_url(item_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"url": f"{str(request.base_url).rstrip('/')}{relative_url}"}
 
 
 @router.post("", response_model=ExerciseLibraryItemOut, status_code=201)

@@ -11,6 +11,7 @@ from app.db.mongo import get_db
 from app.schemas.checkin import FormResponseCreate, FormResponseOut, FormTemplateOut
 from app.schemas.messaging import MessageIn, MessageOut
 from app.schemas.patients import PatientUpdate
+from app.schemas.workout_log import WorkoutExerciseLogIn
 
 from ..application.me_service import MeService
 from ..infrastructure.mongo_me_repository import MongoMeRepository
@@ -252,7 +253,12 @@ async def send_my_message(
     service: MeService = Depends(get_me_service),
 ):
     try:
-        message = await service.send_message(_user_id(current), payload.text)
+        message = await service.send_message(
+            _user_id(current),
+            payload.text,
+            attachment_url=payload.attachment_url,
+            attachment_type=payload.attachment_type,
+        )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -265,11 +271,52 @@ async def send_my_message(
         send_push_to_tokens(
             tokens,
             "Nuevo mensaje de tu paciente",
-            payload.text[:120],
+            payload.text[:120] or "Foto",
             {"type": "chat_message", "patientId": patient.get("id", "")},
         )
 
     return MessageOut(**message)
+
+
+@router.post("/messages/attachment", response_model=dict)
+async def upload_my_message_attachment(
+    file: UploadFile = File(...),
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    content_type = file.content_type or ""
+    allowed = (
+        content_type.startswith("image/")
+        or content_type.startswith("video/")
+        or content_type == "application/pdf"
+    )
+    if not allowed:
+        raise HTTPException(status_code=400, detail="El archivo debe ser una imagen, video o PDF.")
+    patient = await service.get_my_patient_record(_user_id(current))
+    owner_id = patient.get("owner_id") if patient else None
+    if not owner_id:
+        raise HTTPException(status_code=404, detail="No tienes un nutriólogo asignado todavía")
+    try:
+        attachment_url, saved_content_type = await save_upload(
+            file,
+            subfolder=f"messaging/{owner_id}/{patient['id']}",
+            max_size_bytes=25 * 1024 * 1024,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    return {"attachment_url": attachment_url, "content_type": saved_content_type}
+
+
+@router.post("/workout-logs/photo", response_model=dict)
+async def upload_my_workout_log_photo(
+    file: UploadFile = File(...),
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    photo_url, content_type = await save_upload(
+        file, subfolder=f"workout_logs/{_user_id(current)}"
+    )
+    return {"photo_url": photo_url, "content_type": content_type}
 
 
 @router.get("/checkin-templates", response_model=list[FormTemplateOut])
@@ -319,14 +366,14 @@ async def my_workout_logs(
     return await service.list_workout_logs(_user_id(current), workout_plan_id=workout_plan_id)
 
 
-@router.post("/workout-logs/toggle", response_model=dict)
-async def toggle_my_workout_log(
-    payload: dict[str, Any],
+@router.put("/workout-logs/exercise", response_model=dict)
+async def upsert_my_workout_log(
+    payload: WorkoutExerciseLogIn,
     current=Depends(get_current_user),
     service: MeService = Depends(get_me_service),
 ):
     try:
-        return await service.toggle_workout_log(_user_id(current), payload)
+        return await service.upsert_workout_log(_user_id(current), payload)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:

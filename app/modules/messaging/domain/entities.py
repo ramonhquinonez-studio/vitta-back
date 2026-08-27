@@ -11,3 +11,5 @@ class Message:
     text: str
     created_at: datetime
     read_at: datetime | None = None
+    attachment_url: str | None = None
+    attachment_type: str | None = None

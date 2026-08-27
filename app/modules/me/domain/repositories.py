@@ -115,7 +115,15 @@ class MeRepository(Protocol):
     ) -> list[dict]:
         ...
 
-    async def create_message(self, owner_id: str | None, patient_id: str, *, text: str) -> dict:
+    async def create_message(
+        self,
+        owner_id: str | None,
+        patient_id: str,
+        *,
+        text: str,
+        attachment_url: str | None = None,
+        attachment_type: str | None = None,
+    ) -> dict:
         ...
 
     async def list_checkin_templates(self, owner_id: str) -> list[dict]:
@@ -144,7 +152,7 @@ class MeRepository(Protocol):
     async def list_workout_logs(self, patient_id: str, *, workout_plan_id: str | None = None) -> list[dict]:
         ...
 
-    async def toggle_workout_log(
+    async def upsert_workout_log(
         self,
         *,
         owner_id: str,
@@ -152,6 +160,9 @@ class MeRepository(Protocol):
         workout_plan_id: str,
         day_index: int,
         exercise_index: int,
-        details: dict | None = None,
+        sets: list[dict],
+        comment: str | None = None,
+        photo_url: str | None = None,
+        photo_content_type: str | None = None,
     ) -> dict:
         ...

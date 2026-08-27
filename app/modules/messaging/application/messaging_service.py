@@ -15,10 +15,25 @@ class MessagingService:
             raise LookupError("Patient not found")
         return await self._repository.list_for_thread(owner_id, patient_id, since=since)
 
-    async def send_from_nutritionist(self, owner_id: str, patient_id: str, text: str) -> Message:
+    async def send_from_nutritionist(
+        self,
+        owner_id: str,
+        patient_id: str,
+        text: str,
+        *,
+        attachment_url: str | None = None,
+        attachment_type: str | None = None,
+    ) -> Message:
         text = text.strip()
-        if not text:
-            raise ValueError("text is required")
+        if not text and not attachment_url:
+            raise ValueError("text or attachment_url is required")
         if not await self._repository.patient_exists_for_owner(owner_id, patient_id):
             raise LookupError("Patient not found")
-        return await self._repository.create(owner_id, patient_id, sender_role="nutritionist", text=text)
+        return await self._repository.create(
+            owner_id,
+            patient_id,
+            sender_role="nutritionist",
+            text=text,
+            attachment_url=attachment_url,
+            attachment_type=attachment_type,
+        )

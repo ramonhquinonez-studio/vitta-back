@@ -16,6 +16,15 @@ _INVITE_CODE_LENGTH = 8
 _INVITE_CODE_EXPIRE_DAYS = 30
 
 
+def _add_months(date: datetime, months: int) -> datetime:
+    """Returns the first of the month `months` away from `date` (may be
+    negative). Stdlib-only month-bucket walker for dashboard trend queries."""
+    month_index = date.month - 1 + months
+    year = date.year + month_index // 12
+    month = month_index % 12 + 1
+    return datetime(year, month, 1)
+
+
 class MongoPatientsRepository:
     def __init__(self, db: AsyncIOMotorDatabase):
         self._db = db
@@ -27,9 +36,12 @@ class MongoPatientsRepository:
         page: int,
         limit: int,
         query: str | None = None,
+        include_archived: bool = False,
     ) -> tuple[list[Patient], int]:
         owner_oid = self._as_oid(owner_id, field_name="owner")
         filters: dict[str, Any] = {"owner_id": owner_oid}
+        if not include_archived:
+            filters["archived_at"] = None
         if query:
             filters["name"] = {"$regex": query, "$options": "i"}
 
@@ -45,12 +57,15 @@ class MongoPatientsRepository:
 
     async def count_for_owner(self, owner_id: str) -> int:
         owner_oid = self._as_oid(owner_id, field_name="owner")
-        return await self._db.patients.count_documents({"owner_id": owner_oid})
+        return await self._db.patients.count_documents(
+            {"owner_id": owner_oid, "archived_at": None}
+        )
 
     async def create_for_owner(self, owner_id: str, payload: dict) -> Patient:
         owner_oid = self._as_oid(owner_id, field_name="owner")
         document = dict(payload)
         document["owner_id"] = owner_oid
+        document["created_at"] = datetime.utcnow()
         result = await self._db.patients.insert_one(document)
         created = await self._db.patients.find_one({"_id": result.inserted_id})
         if created is None:
@@ -78,13 +93,27 @@ class MongoPatientsRepository:
             return None
         return await self.get_for_owner(owner_id, patient_id)
 
-    async def delete_for_owner(self, owner_id: str, patient_id: str) -> bool:
+    async def archive_for_owner(self, owner_id: str, patient_id: str) -> Patient | None:
         owner_oid = self._as_oid(owner_id, field_name="owner")
         patient_oid = self._as_oid(patient_id)
-        result = await self._db.patients.delete_one(
+        result = await self._db.patients.update_one(
             {"_id": patient_oid, "owner_id": owner_oid},
+            {"$set": {"archived_at": datetime.utcnow()}},
         )
-        return result.deleted_count > 0
+        if result.matched_count == 0:
+            return None
+        return await self.get_for_owner(owner_id, patient_id)
+
+    async def unarchive_for_owner(self, owner_id: str, patient_id: str) -> Patient | None:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        patient_oid = self._as_oid(patient_id)
+        result = await self._db.patients.update_one(
+            {"_id": patient_oid, "owner_id": owner_oid},
+            {"$set": {"archived_at": None}},
+        )
+        if result.matched_count == 0:
+            return None
+        return await self.get_for_owner(owner_id, patient_id)
 
     async def add_body_composition(self, owner_id: str, patient_id: str, payload: dict) -> dict | None:
         owner_oid = self._as_oid(owner_id, field_name="owner")
@@ -213,15 +242,49 @@ class MongoPatientsRepository:
                 "workout_plan_id": str(doc["workout_plan_id"]),
                 "day_index": doc["day_index"],
                 "exercise_index": doc["exercise_index"],
-                "completed_at": doc.get("completed_at"),
-                "sets_completed": doc.get("sets_completed"),
-                "reps_completed": doc.get("reps_completed"),
-                "weight_kg": doc.get("weight_kg"),
-                "rpe": doc.get("rpe"),
+                "sets": doc.get("sets", []),
                 "comment": doc.get("comment"),
+                "photo_url": doc.get("photo_url"),
+                "photo_content_type": doc.get("photo_content_type"),
+                "coach_marked_done": doc.get("coach_marked_done", False),
+                "updated_at": doc.get("updated_at"),
             }
             async for doc in cursor
         ]
+
+    async def toggle_coach_workout_log(
+        self,
+        owner_id: str,
+        patient_id: str,
+        *,
+        workout_plan_id: str,
+        day_index: int,
+        exercise_index: int,
+    ) -> dict | None:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        patient_oid = self._as_oid(patient_id)
+        owned = await self._db.patients.find_one({"_id": patient_oid, "owner_id": owner_oid})
+        if owned is None:
+            return None
+
+        key = {
+            "owner_id": owner_oid,
+            "patient_id": patient_oid,
+            "workout_plan_id": self._as_oid(workout_plan_id),
+            "day_index": day_index,
+            "exercise_index": exercise_index,
+        }
+        existing = await self._db.workout_logs.find_one(key)
+        new_value = not (existing.get("coach_marked_done", False) if existing else False)
+        await self._db.workout_logs.update_one(
+            key,
+            {
+                "$set": {"coach_marked_done": new_value, "updated_at": datetime.utcnow()},
+                "$setOnInsert": {"sets": [], "comment": None},
+            },
+            upsert=True,
+        )
+        return {"completed": new_value}
 
     async def list_checkin_responses(self, owner_id: str, patient_id: str) -> list[dict] | None:
         owner_oid = self._as_oid(owner_id, field_name="owner")
@@ -311,6 +374,87 @@ class MongoPatientsRepository:
             return None
         return self._to_entity(document)
 
+    async def get_dashboard(self, owner_id: str) -> dict:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        now = datetime.utcnow()
+        start_of_month = datetime(now.year, now.month, 1)
+        week_from_now = now + timedelta(days=7)
+        inactivity_cutoff = now - timedelta(days=14)
+
+        total_patients = await self._db.patients.count_documents(
+            {"owner_id": owner_oid, "archived_at": None}
+        )
+        new_patients_this_month = await self._db.patients.count_documents(
+            {"owner_id": owner_oid, "archived_at": None, "created_at": {"$gte": start_of_month}}
+        )
+        upcoming_appointments_this_week = await self._db.appointments.count_documents(
+            {
+                "owner_id": owner_oid,
+                "start": {"$gte": now, "$lt": week_from_now},
+                "status": {"$in": ["confirmed", "pending"]},
+            }
+        )
+        completed_appointments_this_month = await self._db.appointments.count_documents(
+            {
+                "owner_id": owner_oid,
+                "status": "completed",
+                "start": {"$gte": start_of_month, "$lt": now},
+            }
+        )
+
+        patient_names = {
+            doc["_id"]: doc.get("name", "")
+            async for doc in self._db.patients.find(
+                {"owner_id": owner_oid, "archived_at": None}, {"name": 1}
+            )
+        }
+        patient_ids = list(patient_names.keys())
+
+        active_ids: set = set()
+        if patient_ids:
+            for collection, timestamp_field in (
+                (self._db.measurements, "at"),
+                (self._db.food_diary_entries, "at"),
+                (self._db.checkin_responses, "submitted_at"),
+                (self._db.workout_logs, "updated_at"),
+                (self._db.appointments, "start"),
+            ):
+                recent_ids = await collection.distinct(
+                    "patient_id",
+                    {"patient_id": {"$in": patient_ids}, timestamp_field: {"$gte": inactivity_cutoff}},
+                )
+                active_ids.update(recent_ids)
+
+        inactive_patients = [
+            {"id": str(patient_id), "name": patient_names[patient_id]}
+            for patient_id in patient_ids
+            if patient_id not in active_ids
+        ]
+
+        new_patients_by_month = []
+        bucket_start = _add_months(start_of_month, -5)
+        for _ in range(6):
+            bucket_end = _add_months(bucket_start, 1)
+            count = await self._db.patients.count_documents(
+                {
+                    "owner_id": owner_oid,
+                    "archived_at": None,
+                    "created_at": {"$gte": bucket_start, "$lt": bucket_end},
+                }
+            )
+            new_patients_by_month.append({"month": bucket_start.strftime("%Y-%m"), "count": count})
+            bucket_start = bucket_end
+
+        return {
+            "total_patients": total_patients,
+            "new_patients_this_month": new_patients_this_month,
+            "upcoming_appointments_this_week": upcoming_appointments_this_week,
+            "completed_appointments_this_month": completed_appointments_this_month,
+            "active_patients": len(active_ids),
+            "inactive_patients": inactive_patients,
+            "new_patients_by_month": new_patients_by_month,
+        }
+
     def _to_entity(self, document: dict) -> Patient:
         return Patient(
             id=str(document["_id"]),
@@ -321,7 +465,16 @@ class MongoPatientsRepository:
             height_cm=document.get("height_cm"),
             allergies=list(document.get("allergies") or []),
             notes=document.get("notes"),
+            tags=list(document.get("tags") or []),
             user_id=self._stringify_maybe_oid(document.get("user_id")),
+            created_at=document.get("created_at"),
+            daily_kcal_goal=document.get("daily_kcal_goal"),
+            daily_protein_g_goal=document.get("daily_protein_g_goal"),
+            daily_carbs_g_goal=document.get("daily_carbs_g_goal"),
+            daily_fat_g_goal=document.get("daily_fat_g_goal"),
+            email=document.get("email"),
+            phone=document.get("phone"),
+            archived_at=document.get("archived_at"),
         )
 
     def _as_oid(self, id_str: str, field_name: str = "id") -> ObjectId:

@@ -3,7 +3,18 @@ import unittest
 from app.modules.workout_plans.application.workout_plans_service import WorkoutPlansService
 
 _SAMPLE_DAYS = [
-    {"label": "Día 1 - Piernas", "exercises": [{"name": "Sentadilla", "sets": 4, "reps": 10}]},
+    {
+        "label": "Día 1 - Piernas",
+        "exercises": [
+            {
+                "name": "Sentadilla",
+                "sets": [
+                    {"reps_min": 8, "reps_max": 12, "weight_kg": 40, "rpe": 8, "rest_seconds": 60},
+                    {"reps_min": 8, "reps_max": 12, "weight_kg": 40, "rpe": 8, "rest_seconds": 60},
+                ],
+            }
+        ],
+    },
 ]
 
 
@@ -85,7 +96,30 @@ class WorkoutPlansServiceTest(unittest.IsolatedAsyncioTestCase):
     async def test_create_plan_rejects_an_exercise_without_a_name(self):
         repo = _FakeWorkoutPlansRepository()
         service = WorkoutPlansService(repo)
-        days = [{"label": "Día 1", "exercises": [{"name": "", "sets": 3}]}]
+        days = [{"label": "Día 1", "exercises": [{"name": "", "sets": []}]}]
+
+        with self.assertRaises(ValueError):
+            await service.create_plan("owner-1", {"name": "T", "days": days})
+
+    async def test_create_plan_accepts_days_with_distinct_weekdays(self):
+        repo = _FakeWorkoutPlansRepository()
+        service = WorkoutPlansService(repo)
+        days = [
+            {"label": "Día 1", "exercises": [], "weekdays": [1, 4]},
+            {"label": "Día 2", "exercises": [], "weekdays": [2, 5]},
+        ]
+
+        plan = await service.create_plan("owner-1", {"name": "T", "days": days})
+
+        self.assertEqual(plan["days"][0]["weekdays"], [1, 4])
+
+    async def test_create_plan_rejects_a_weekday_assigned_to_two_days(self):
+        repo = _FakeWorkoutPlansRepository()
+        service = WorkoutPlansService(repo)
+        days = [
+            {"label": "Día 1", "exercises": [], "weekdays": [1]},
+            {"label": "Día 2", "exercises": [], "weekdays": [1]},
+        ]
 
         with self.assertRaises(ValueError):
             await service.create_plan("owner-1", {"name": "T", "days": days})

@@ -20,3 +20,4 @@ class Article:
     sections: list[ArticleSection]
     owner_id: str | None = None
     video_url: str | None = None
+    source_url: str | None = None

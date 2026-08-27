@@ -454,7 +454,7 @@ async def main():
         # Usuario pro (nutriólogo)
         pro_email = "pro_demo@nutri.app"
         pro_pwd = "123456"
-        pro_id = await upsert_user(pro_email, pro_pwd, role="pro")
+        pro_id = await upsert_user(pro_email, pro_pwd, role="nutritionist")
 
         # Usuario paciente
         patient_email = "patient_demo@nutri.app"

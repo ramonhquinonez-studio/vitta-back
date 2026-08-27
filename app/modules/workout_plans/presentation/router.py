@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.deps import get_current_user, require_role
+from app.core.storage import save_upload
 from app.db.mongo import get_db
 from app.schemas.workout_plan import WorkoutPlanCreate, WorkoutPlanOut, WorkoutPlanUpdate
+
+_MAX_VIDEO_SIZE_BYTES = 150 * 1024 * 1024
 
 from ..application.workout_plans_service import WorkoutPlansService
 from ..infrastructure.mongo_workout_plans_repository import MongoWorkoutPlansRepository
@@ -26,6 +29,32 @@ def _owner_id(current) -> str:
     if not owner_id:
         raise HTTPException(status_code=401, detail="Invalid user payload")
     return owner_id
+
+
+@router.post("/exercise-media", response_model=dict)
+async def upload_exercise_media(
+    file: UploadFile = File(...),
+    current=Depends(get_current_user),
+):
+    owner_id = _owner_id(current)
+    content_type = file.content_type or ""
+    is_photo = content_type.startswith("image/")
+    is_video = content_type.startswith("video/")
+    if not (is_photo or is_video):
+        raise HTTPException(status_code=400, detail="El archivo debe ser una imagen o video.")
+    try:
+        url, saved_content_type = await save_upload(
+            file,
+            subfolder=f"workout_plans/{owner_id}/media",
+            max_size_bytes=_MAX_VIDEO_SIZE_BYTES,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    return {
+        "url": url,
+        "media_type": "photo" if is_photo else "video",
+        "content_type": saved_content_type,
+    }
 
 
 @router.post("", response_model=WorkoutPlanOut, status_code=201)

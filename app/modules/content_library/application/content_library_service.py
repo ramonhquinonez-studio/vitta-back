@@ -12,6 +12,9 @@ class ContentLibraryService:
     async def list_my_articles(self, owner_id: str) -> list[Article]:
         return await self._repository.list_for_owner(owner_id)
 
+    async def list_platform_articles(self) -> list[Article]:
+        return await self._repository.list_platform_articles()
+
     async def create(self, owner_id: str, payload: dict) -> Article:
         self._validate(payload)
         return await self._repository.create_for_owner(owner_id, payload)

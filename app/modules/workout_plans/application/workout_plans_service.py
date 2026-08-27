@@ -47,7 +47,14 @@ class WorkoutPlansService:
         days = payload.get("days") or []
         if not days:
             raise ValueError("At least one day is required")
+        seen_weekdays: set[int] = set()
         for day in days:
             for exercise in day.get("exercises") or []:
                 if not exercise.get("name"):
                     raise ValueError("Every exercise needs a name")
+            for weekday in day.get("weekdays") or []:
+                if weekday in seen_weekdays:
+                    raise ValueError(
+                        f"weekday {weekday} is assigned to more than one day"
+                    )
+                seen_weekdays.add(weekday)

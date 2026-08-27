@@ -53,6 +53,7 @@ class _FakeContentLibraryRepository:
 class _FakeOwnerScopedRepository:
     def __init__(self):
         self.mine: dict[str, list[Article]] = {}
+        self.platform: list[Article] = []
         self.sequence = 1
 
     async def list_articles(self):
@@ -60,6 +61,9 @@ class _FakeOwnerScopedRepository:
 
     async def list_for_owner(self, owner_id):
         return self.mine.get(owner_id, [])
+
+    async def list_platform_articles(self):
+        return self.platform
 
     def _find(self, owner_id, article_id):
         for article in self.mine.get(owner_id, []):
@@ -163,6 +167,28 @@ class ContentLibraryServiceTest(unittest.IsolatedAsyncioTestCase):
 
         await service.delete("owner-1", created.id)
         self.assertEqual(await service.list_my_articles("owner-1"), [])
+
+    async def test_list_platform_articles_returns_only_platform_content(self):
+        repository = _FakeOwnerScopedRepository()
+        repository.platform = [
+            Article(
+                id="medlineplus-nutrition",
+                category="Alimentos y nutrición",
+                title="Nutrición",
+                description="...",
+                read_time="3 min",
+                emoji="🥗",
+                order=100,
+                sections=[ArticleSection(title="", text="cuerpo")],
+            )
+        ]
+        await repository.create_for_owner("owner-1", {"title": "Mi propio artículo"})
+        service = ContentLibraryService(repository)
+
+        platform_articles = await service.list_platform_articles()
+
+        self.assertEqual(len(platform_articles), 1)
+        self.assertEqual(platform_articles[0].id, "medlineplus-nutrition")
 
     async def test_update_rejects_an_article_not_owned(self):
         repository = _FakeOwnerScopedRepository()
