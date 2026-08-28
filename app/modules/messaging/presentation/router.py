@@ -100,6 +100,7 @@ async def upload_message_attachment(
     patient_id: str,
     file: UploadFile = File(...),
     current=Depends(get_current_user),
+    service: MessagingService = Depends(get_messaging_service),
 ):
     content_type = file.content_type or ""
     allowed = (
@@ -110,6 +111,10 @@ async def upload_message_attachment(
     if not allowed:
         raise HTTPException(status_code=400, detail="El archivo debe ser una imagen, video o PDF.")
     owner_id = _owner_id(current)
+    try:
+        await service.ensure_patient_belongs_to_owner(owner_id, patient_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     try:
         attachment_url, saved_content_type = await save_upload(
             file,

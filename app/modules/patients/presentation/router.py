@@ -111,6 +111,10 @@ async def get_practice_dashboard(
     session_price = profile.get("session_price") or 0
     dashboard["estimated_revenue_this_month"] = dashboard["completed_appointments_this_month"] * session_price
     dashboard["revenue_currency"] = profile.get("session_price_currency") or "MXN"
+    dashboard["estimated_revenue_by_month"] = [
+        {"month": bucket["month"], "amount": bucket["count"] * session_price}
+        for bucket in dashboard["completed_appointments_by_month"]
+    ]
     return dashboard
 
 
@@ -277,9 +281,12 @@ async def add_patient_body_composition(
     attachment_url: str | None = None
     attachment_type: str | None = None
     if file is not None and file.filename:
-        attachment_url, attachment_type = await save_upload(
-            file, subfolder=f"body_compositions/{patient_id}"
-        )
+        try:
+            attachment_url, attachment_type = await save_upload(
+                file, subfolder=f"body_compositions/{patient_id}", max_size_bytes=25 * 1024 * 1024
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
 
     metrics = {
         key: value

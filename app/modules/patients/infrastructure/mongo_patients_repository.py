@@ -180,6 +180,8 @@ class MongoPatientsRepository:
                 "restaurant": doc.get("restaurant"),
                 "kcal": doc.get("kcal"),
                 "protein": doc.get("protein"),
+                "carbs": doc.get("carbs"),
+                "fat": doc.get("fat"),
                 "notes": doc.get("notes"),
             }
             async for doc in cursor
@@ -445,6 +447,22 @@ class MongoPatientsRepository:
             new_patients_by_month.append({"month": bucket_start.strftime("%Y-%m"), "count": count})
             bucket_start = bucket_end
 
+        completed_appointments_by_month = []
+        bucket_start = _add_months(start_of_month, -5)
+        for _ in range(6):
+            bucket_end = _add_months(bucket_start, 1)
+            count = await self._db.appointments.count_documents(
+                {
+                    "owner_id": owner_oid,
+                    "status": "completed",
+                    "start": {"$gte": bucket_start, "$lt": bucket_end},
+                }
+            )
+            completed_appointments_by_month.append(
+                {"month": bucket_start.strftime("%Y-%m"), "count": count}
+            )
+            bucket_start = bucket_end
+
         return {
             "total_patients": total_patients,
             "new_patients_this_month": new_patients_this_month,
@@ -453,6 +471,7 @@ class MongoPatientsRepository:
             "active_patients": len(active_ids),
             "inactive_patients": inactive_patients,
             "new_patients_by_month": new_patients_by_month,
+            "completed_appointments_by_month": completed_appointments_by_month,
         }
 
     def _to_entity(self, document: dict) -> Patient:

@@ -32,6 +32,8 @@ class EatingOutOption(BaseModel):
     dish: str
     kcal: Optional[float] = None
     protein: Optional[float] = None
+    carbs: Optional[float] = None
+    fat: Optional[float] = None
 
 class PlanMeal(BaseModel):
     title: str

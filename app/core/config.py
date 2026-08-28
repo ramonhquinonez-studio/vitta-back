@@ -82,6 +82,14 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "JWT_REFRESH_SECRET must be set from environment outside local dev."
                 )
+            if not self.CORS_ORIGINS:
+                # `main.py` falls back to "*" (with allow_credentials=True) when
+                # this is empty — CORSMiddleware then echoes back whatever
+                # Origin header the request sent, functionally trusting any
+                # origin for credentialed requests. Fine for local dev; a real
+                # deployment that simply forgot to set this would otherwise
+                # fail open silently.
+                raise ValueError("CORS_ORIGINS must be set from environment outside local dev.")
 
         has_google_id = bool(self.GOOGLE_CLIENT_ID.strip())
         has_google_secret = bool(self.GOOGLE_CLIENT_SECRET.strip())

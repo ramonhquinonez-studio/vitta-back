@@ -53,3 +53,23 @@ class SaveUploadTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertTrue(url.startswith("/uploads/workout_plans/owner1/videos/"))
+
+    async def test_ignores_a_spoofed_filename_extension_and_uses_content_type_instead(self):
+        # A malicious filename shouldn't decide the saved extension: /uploads is
+        # served by StaticFiles, which infers Content-Type from the extension —
+        # trusting the filename here would let an attacker get an uploaded file
+        # served back as e.g. text/html (stored XSS) regardless of its real
+        # content type.
+        file = _upload_file(b"<script>evil()</script>", filename="x.html", content_type="image/jpeg")
+
+        url, content_type = await save_upload(file, subfolder="measurements/patient1")
+
+        self.assertTrue(url.endswith(".jpg"))
+        self.assertEqual(content_type, "image/jpeg")
+
+    async def test_falls_back_to_a_safe_extension_for_an_unrecognized_content_type(self):
+        file = _upload_file(b"data", filename="whatever.exe", content_type="application/x-msdownload")
+
+        url, _content_type = await save_upload(file, subfolder="measurements/patient1")
+
+        self.assertTrue(url.endswith(".bin"))

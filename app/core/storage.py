@@ -19,11 +19,20 @@ _EXT_BY_CONTENT_TYPE = {
 async def save_upload(
     file: UploadFile, *, subfolder: str, max_size_bytes: int | None = None
 ) -> tuple[str, str]:
-    """Persists an uploaded file under UPLOADS_DIR/<subfolder> and returns (url, content_type)."""
+    """Persists an uploaded file under UPLOADS_DIR/<subfolder> and returns (url, content_type).
+
+    The saved filename's extension is derived *only* from the declared
+    `content_type` (via `_EXT_BY_CONTENT_TYPE`), never from the client-supplied
+    `file.filename`. `/uploads` is served by Starlette's `StaticFiles`, which
+    infers the response `Content-Type` from the file's extension at serve
+    time — trusting an attacker-controlled filename (e.g. naming a file
+    `x.html`) would let it be served back as `text/html` from this API's own
+    origin, a stored-XSS vector. An unrecognized content type falls back to
+    `.bin`, served as `application/octet-stream` (never executable/renderable
+    by a browser) rather than silently trusting the filename.
+    """
     content_type = file.content_type or "application/octet-stream"
-    ext = Path(file.filename or "").suffix.lower()
-    if not ext:
-        ext = _EXT_BY_CONTENT_TYPE.get(content_type, "")
+    ext = _EXT_BY_CONTENT_TYPE.get(content_type, ".bin")
 
     data = await file.read()
     if max_size_bytes is not None and len(data) > max_size_bytes:

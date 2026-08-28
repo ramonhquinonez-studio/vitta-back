@@ -70,7 +70,12 @@ async def upload_my_logo(
     service: NutritionistProfileService = Depends(get_nutritionist_profile_service),
 ):
     owner_id = _owner_id(current)
-    logo_url, _content_type = await save_upload(file, subfolder=f"nutritionist_profile/{owner_id}")
+    try:
+        logo_url, _content_type = await save_upload(
+            file, subfolder=f"nutritionist_profile/{owner_id}", max_size_bytes=5 * 1024 * 1024
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
     try:
         return await service.update_my_profile(owner_id, {"logo_url": logo_url})
     except ValueError as exc:

@@ -121,9 +121,12 @@ async def upload_plan_attachment(
     current=Depends(get_current_user),
     service: PlansService = Depends(get_plans_service),
 ):
-    attachment_url, attachment_type = await save_upload(
-        file, subfolder=f"plans/{plan_id}"
-    )
+    try:
+        attachment_url, attachment_type = await save_upload(
+            file, subfolder=f"plans/{plan_id}", max_size_bytes=25 * 1024 * 1024
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
     try:
         return await service.set_attachment(
             _owner_id(current), plan_id, attachment_url, attachment_type

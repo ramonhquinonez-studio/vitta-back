@@ -106,7 +106,11 @@ async def register_nutritionist(
     return RegisterOut(id=user.id, email=user.email)
 
 
-@router.post("/login", response_model=TokensOut)
+@router.post(
+    "/login",
+    response_model=TokensOut,
+    dependencies=[Depends(rate_limit("login", limit=20, window_seconds=3600))],
+)
 async def login(
     payload: LoginIn,
     service: AuthService = Depends(get_auth_service),
@@ -123,7 +127,11 @@ async def login(
     )
 
 
-@router.post("/forgot-password", response_model=ForgotPasswordOut)
+@router.post(
+    "/forgot-password",
+    response_model=ForgotPasswordOut,
+    dependencies=[Depends(rate_limit("forgot-password", limit=5, window_seconds=3600))],
+)
 async def forgot_password(
     payload: ForgotPasswordIn,
     service: AuthService = Depends(get_auth_service),

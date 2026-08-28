@@ -189,9 +189,12 @@ async def add_measurement(
     attachment_url: str | None = None
     attachment_type: str | None = None
     if file is not None and file.filename:
-        attachment_url, attachment_type = await save_upload(
-            file, subfolder=f"measurements/{_user_id(current)}"
-        )
+        try:
+            attachment_url, attachment_type = await save_upload(
+                file, subfolder=f"measurements/{_user_id(current)}", max_size_bytes=15 * 1024 * 1024
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
 
     payload = {
         "at": at,
@@ -313,9 +316,12 @@ async def upload_my_workout_log_photo(
     current=Depends(get_current_user),
     service: MeService = Depends(get_me_service),
 ):
-    photo_url, content_type = await save_upload(
-        file, subfolder=f"workout_logs/{_user_id(current)}"
-    )
+    try:
+        photo_url, content_type = await save_upload(
+            file, subfolder=f"workout_logs/{_user_id(current)}", max_size_bytes=15 * 1024 * 1024
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
     return {"photo_url": photo_url, "content_type": content_type}
 
 

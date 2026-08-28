@@ -23,20 +23,25 @@ Ese layout es funcional, pero no separa claramente:
 
 ## Main Gaps
 
-- no hay tests visibles;
-- no hay docs ni specs;
-- `config` necesitaba baseline de secrets/env para dejar de depender de valores sensibles hardcodeados.
+- 4 routers legacy siguen sin migrar a `app/modules/` (ver "Pending Migration" abajo) — el resto de los gaps originales (tests, docs, baseline de secrets) ya están resueltos, ver "Applied Foundations".
 
 ## Applied Foundations
 
-- existe baseline SDD y guardrails documentados;
-- la configuración ahora debe operar con placeholders locales explícitos y validaciones de entorno.
-- `auth` ya tiene módulo base en `app/modules/auth/` y `app/routers/auth.py` quedó como wrapper delgado.
-- `appointments` ya tiene módulo base en `app/modules/appointments/` y `app/routers/appointments.py` quedó como wrapper delgado.
-- `patients` ya tiene módulo base en `app/modules/patients/` y `app/routers/patients.py` quedó como wrapper delgado.
-- `me` ya tiene módulo base en `app/modules/me/` y `app/routers/me.py` quedó como wrapper delgado.
-- `plans` ya tiene módulo base en `app/modules/plans/` y `app/routers/plans.py` quedó como wrapper delgado.
-- la suite backend ahora incluye guardrails para wrappers y smoke tests de routers modulares.
+- existe baseline SDD y guardrails documentados, con una suite de +225 tests;
+- la configuración ahora debe operar con placeholders locales explícitos y validaciones de entorno (`app/core/config.py`'s `validate_security_baseline` — rechaza JWT secrets/CORS_ORIGINS placeholder fuera de local).
+- **17 de 21 routers ya están migrados** a `app/modules/<feature>/{domain,application,infrastructure,presentation}/`, con su `app/routers/<name>.py` reducido a un wrapper de 1 línea (re-export delgado): `auth`, `appointments`, `billing`, `checkin`, `consultations`, `content_library`, `equivalencies`, `exercise_library`, `me`, `messaging`, `nutrition_lookup`, `nutritionist_profile`, `patients`, `plans`, `recipes`, `recommendations`, `workout_plans`.
+- la suite backend incluye guardrails para wrappers y smoke tests de routers modulares.
+
+## Pending Migration
+
+4 routers siguen como archivos standalone en `app/routers/`, sin paquete `app/modules/` propio:
+
+- `users.py` (37 líneas) — solo self-scoped (`get_current_user`), riesgo/prioridad bajos.
+- `devices.py` (36 líneas) — igual, self-scoped.
+- `google_oauth.py` (130 líneas) — el más grande de los cuatro; flujo de OAuth de Calendar bien aislado, pero vale migrarlo por consistencia.
+- `health.py` (12 líneas) — trivial, sin urgencia de migrar.
+
+Ninguno de los cuatro tiene deuda funcional conocida — es puramente inconsistencia estructural frente al resto del código, no bugs.
 
 ## Target Shape
 
@@ -50,12 +55,11 @@ app/modules/<feature>/
 
 ## Refactor Priority
 
-1. `core/config` y seguridad básica
-2. legacy `me/appointments` convergence
-3. legacy `me/patients` convergence
-4. me typed contracts hardening
-5. plan assignment/reporting hardening
-6. repo/contract hardening
+Los primeros seis ítems originales de esta lista ya están resueltos (config/seguridad, convergencia de `me` con `appointments`/`patients`, contratos tipados de `me`, hardening de asignación de planes y de repos/contratos). Lo que queda:
+
+1. Migrar `google_oauth.py` a `app/modules/google_oauth/` — el router legacy más grande restante.
+2. Migrar `users.py` y `devices.py` — pequeños, self-scoped, bajo riesgo.
+3. `health.py` puede quedarse como está indefinidamente — no hay valor real en migrarlo.
 
 ## Rule In Force
 

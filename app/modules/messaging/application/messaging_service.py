@@ -15,6 +15,13 @@ class MessagingService:
             raise LookupError("Patient not found")
         return await self._repository.list_for_thread(owner_id, patient_id, since=since)
 
+    async def ensure_patient_belongs_to_owner(self, owner_id: str, patient_id: str) -> None:
+        """Raises LookupError if `patient_id` isn't owned by `owner_id` — used
+        before an upload so a nutritionist can't stash a file under another
+        nutritionist's patient_id before any message referencing it exists."""
+        if not await self._repository.patient_exists_for_owner(owner_id, patient_id):
+            raise LookupError("Patient not found")
+
     async def send_from_nutritionist(
         self,
         owner_id: str,

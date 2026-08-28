@@ -431,6 +431,8 @@ class MongoMeRepository:
             "restaurant": payload.get("restaurant"),
             "kcal": payload.get("kcal"),
             "protein": payload.get("protein"),
+            "carbs": payload.get("carbs"),
+            "fat": payload.get("fat"),
             "notes": payload.get("notes"),
             "created_at": datetime.utcnow(),
         }
@@ -447,6 +449,8 @@ class MongoMeRepository:
             "restaurant": doc.get("restaurant"),
             "kcal": doc.get("kcal"),
             "protein": doc.get("protein"),
+            "carbs": doc.get("carbs"),
+            "fat": doc.get("fat"),
             "notes": doc.get("notes"),
         }
 
