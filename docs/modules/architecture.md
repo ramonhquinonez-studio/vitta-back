@@ -23,25 +23,16 @@ Ese layout es funcional, pero no separa claramente:
 
 ## Main Gaps
 
-- 4 routers legacy siguen sin migrar a `app/modules/` (ver "Pending Migration" abajo) — el resto de los gaps originales (tests, docs, baseline de secrets) ya están resueltos, ver "Applied Foundations".
+Ninguno pendiente en este frente — los 21 routers ya están migrados (ver "Applied Foundations"). El resto de los gaps originales (tests, docs, baseline de secrets) también están resueltos.
 
 ## Applied Foundations
 
-- existe baseline SDD y guardrails documentados, con una suite de +225 tests;
+- existe baseline SDD y guardrails documentados, con una suite de +227 tests;
 - la configuración ahora debe operar con placeholders locales explícitos y validaciones de entorno (`app/core/config.py`'s `validate_security_baseline` — rechaza JWT secrets/CORS_ORIGINS placeholder fuera de local).
-- **17 de 21 routers ya están migrados** a `app/modules/<feature>/{domain,application,infrastructure,presentation}/`, con su `app/routers/<name>.py` reducido a un wrapper de 1 línea (re-export delgado): `auth`, `appointments`, `billing`, `checkin`, `consultations`, `content_library`, `equivalencies`, `exercise_library`, `me`, `messaging`, `nutrition_lookup`, `nutritionist_profile`, `patients`, `plans`, `recipes`, `recommendations`, `workout_plans`.
-- la suite backend incluye guardrails para wrappers y smoke tests de routers modulares.
-
-## Pending Migration
-
-4 routers siguen como archivos standalone en `app/routers/`, sin paquete `app/modules/` propio:
-
-- `users.py` (37 líneas) — solo self-scoped (`get_current_user`), riesgo/prioridad bajos.
-- `devices.py` (36 líneas) — igual, self-scoped.
-- `google_oauth.py` (130 líneas) — el más grande de los cuatro; flujo de OAuth de Calendar bien aislado, pero vale migrarlo por consistencia.
-- `health.py` (12 líneas) — trivial, sin urgencia de migrar.
-
-Ninguno de los cuatro tiene deuda funcional conocida — es puramente inconsistencia estructural frente al resto del código, no bugs.
+- **Los 21 routers están migrados** a `app/modules/<feature>/{domain,application,infrastructure,presentation}/`, cada `app/routers/<name>.py` reducido a un wrapper de 1 línea (re-export delgado): `auth`, `appointments`, `billing`, `checkin`, `consultations`, `content_library`, `equivalencies`, `exercise_library`, `me`, `messaging`, `nutrition_lookup`, `nutritionist_profile`, `patients`, `plans`, `recipes`, `recommendations`, `workout_plans`, y — última tanda, `067-back-router-migration` — `users`, `devices`, `google_oauth`, `health`.
+  - `health` es el único módulo sin capas `domain/application/infrastructure`: no hay lógica de negocio ni persistencia que separar (solo devuelve config estática), así que solo tiene `presentation/router.py`. El resto de los 21 sí tiene las cuatro capas.
+  - `google_oauth` sigue el mismo patrón que `billing` (que aísla el SDK de Stripe en `infrastructure/stripe_billing_provider.py`): el wrapper del SDK de Google (`Flow`, intercambio de tokens, revocación HTTP) vive en `infrastructure/google_oauth_client.py`, separado de la orquestación (emisión/validación del JWT de `state`, flujo de conexión/desconexión) en `application/google_oauth_service.py`.
+- la suite backend incluye guardrails para wrappers y smoke tests de routers modulares (`test_router_wrapper_guardrails.py` cubre los 21, aunque su lista interna aún no incluye `billing`/`checkin`/`messaging`/`workout_plans`/`exercise_library`/`nutrition_lookup` — deuda de documentación menor, no funcional, dejada tal cual por ahora).
 
 ## Target Shape
 
@@ -55,11 +46,7 @@ app/modules/<feature>/
 
 ## Refactor Priority
 
-Los primeros seis ítems originales de esta lista ya están resueltos (config/seguridad, convergencia de `me` con `appointments`/`patients`, contratos tipados de `me`, hardening de asignación de planes y de repos/contratos). Lo que queda:
-
-1. Migrar `google_oauth.py` a `app/modules/google_oauth/` — el router legacy más grande restante.
-2. Migrar `users.py` y `devices.py` — pequeños, self-scoped, bajo riesgo.
-3. `health.py` puede quedarse como está indefinidamente — no hay valor real en migrarlo.
+Todos los ítems originales de esta lista están resueltos (config/seguridad, convergencia de `me` con `appointments`/`patients`, contratos tipados de `me`, hardening de asignación de planes y de repos/contratos, y la migración de los últimos 4 routers). Sin refactors estructurales pendientes por ahora — ver `specs/SPEC_ROADMAP.md`'s "Next Recommended Specs" para el resto del backlog (logging estructurado, etc.).
 
 ## Rule In Force
 

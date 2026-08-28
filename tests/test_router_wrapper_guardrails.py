@@ -17,6 +17,10 @@ class RouterWrapperGuardrailsTest(unittest.TestCase):
             "app/routers/equivalencies.py": "from app.modules.equivalencies.presentation.router import router",
             "app/routers/consultations.py": "from app.modules.consultations.presentation.router import router",
             "app/routers/content_library.py": "from app.modules.content_library.presentation.router import router",
+            "app/routers/health.py": "from app.modules.health.presentation.router import router",
+            "app/routers/users.py": "from app.modules.users.presentation.router import router",
+            "app/routers/devices.py": "from app.modules.devices.presentation.router import router",
+            "app/routers/google_oauth.py": "from app.modules.google_oauth.presentation.router import router",
         }
 
         for relative_path, expected_line in expected.items():

@@ -29,4 +29,9 @@ def send_push_to_tokens(
         data={k:str(v) for k,v in (data or {}).items()},
         tokens=tokens,
     )
-    return messaging.send_multicast(message)
+    # `send_multicast`/`send_all` were removed in firebase-admin 7.x (Google
+    # deprecated the underlying FCM batch API) — `send_each_for_multicast` is
+    # the direct replacement: same `MulticastMessage` input, same
+    # `BatchResponse` output, just issues one HTTP call per token instead of
+    # a single batched request under the hood.
+    return messaging.send_each_for_multicast(message)
