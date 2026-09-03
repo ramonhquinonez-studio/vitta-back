@@ -36,6 +36,7 @@ class MongoRecommendationsRepository:
             "price": payload.get("price"),
             "rating": payload.get("rating"),
             "emoji": payload.get("emoji"),
+            "equivalency_group_id": payload.get("equivalency_group_id"),
             "created_at": datetime.utcnow(),
         }
         result = await self._db.recommendations.insert_one(document)
@@ -64,10 +65,65 @@ class MongoRecommendationsRepository:
         )
         return result.deleted_count > 0
 
+    async def list_platform_recommendations(
+        self, *, kind: str | None = None
+    ) -> list[Recommendation]:
+        filters: dict = {"owner_id": None}
+        if kind:
+            filters["kind"] = kind
+        cursor = self._db.recommendations.find(filters).sort("created_at", -1)
+        return [self._to_entity(doc) async for doc in cursor]
+
+    async def assign_to_patients(
+        self, owner_id: str, recommendation_id: str, patient_ids: list[str]
+    ) -> int:
+        owner_oid = self._as_oid(owner_id)
+        rec_oid = self._as_oid(recommendation_id)
+        rec = await self._db.recommendations.find_one({"_id": rec_oid, "owner_id": owner_oid})
+        if rec is None:
+            return 0
+        count = 0
+        for patient_id in patient_ids:
+            patient_oid = self._as_oid(patient_id)
+            result = await self._db.recommendation_assignments.update_one(
+                {
+                    "owner_id": owner_oid,
+                    "recommendation_id": rec_oid,
+                    "patient_id": patient_oid,
+                },
+                {"$setOnInsert": {"assigned_at": datetime.utcnow()}},
+                upsert=True,
+            )
+            if result.upserted_id is not None or result.matched_count > 0:
+                count += 1
+        return count
+
+    async def unassign_from_patient(
+        self, owner_id: str, recommendation_id: str, patient_id: str
+    ) -> bool:
+        owner_oid = self._as_oid(owner_id)
+        rec_oid = self._as_oid(recommendation_id)
+        patient_oid = self._as_oid(patient_id)
+        result = await self._db.recommendation_assignments.delete_one(
+            {"owner_id": owner_oid, "recommendation_id": rec_oid, "patient_id": patient_oid}
+        )
+        return result.deleted_count > 0
+
+    async def list_assigned_patient_ids(
+        self, owner_id: str, recommendation_id: str
+    ) -> list[str]:
+        owner_oid = self._as_oid(owner_id)
+        rec_oid = self._as_oid(recommendation_id)
+        cursor = self._db.recommendation_assignments.find(
+            {"owner_id": owner_oid, "recommendation_id": rec_oid}
+        )
+        return [str(doc["patient_id"]) async for doc in cursor]
+
     def _to_entity(self, document: dict) -> Recommendation:
+        owner_id = document.get("owner_id")
         return Recommendation(
             id=str(document["_id"]),
-            owner_id=str(document["owner_id"]),
+            owner_id=str(owner_id) if owner_id is not None else None,
             kind=document.get("kind") or "supplement",
             title=document.get("title") or "",
             subtitle=document.get("subtitle"),
@@ -80,6 +136,7 @@ class MongoRecommendationsRepository:
             price=document.get("price"),
             rating=document.get("rating"),
             emoji=document.get("emoji"),
+            equivalency_group_id=document.get("equivalency_group_id"),
         )
 
     def _as_oid(self, id_str: str) -> ObjectId:

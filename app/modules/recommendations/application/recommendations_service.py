@@ -45,3 +45,28 @@ class RecommendationsService:
         deleted = await self._repository.delete_for_owner(owner_id, recommendation_id)
         if not deleted:
             raise LookupError("Recommendation not found")
+
+    async def list_platform_recommendations(
+        self, *, kind: str | None = None
+    ) -> list[Recommendation]:
+        return await self._repository.list_platform_recommendations(kind=kind)
+
+    async def assign_to_patients(
+        self, owner_id: str, recommendation_id: str, patient_ids: list[str]
+    ) -> int:
+        if not patient_ids:
+            raise ValueError("patient_ids is required")
+        count = await self._repository.assign_to_patients(owner_id, recommendation_id, patient_ids)
+        if count == 0:
+            raise LookupError("Recommendation not found")
+        return count
+
+    async def unassign_from_patient(
+        self, owner_id: str, recommendation_id: str, patient_id: str
+    ) -> None:
+        removed = await self._repository.unassign_from_patient(owner_id, recommendation_id, patient_id)
+        if not removed:
+            raise LookupError("Assignment not found")
+
+    async def list_assignments(self, owner_id: str, recommendation_id: str) -> list[str]:
+        return await self._repository.list_assigned_patient_ids(owner_id, recommendation_id)

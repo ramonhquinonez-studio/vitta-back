@@ -77,6 +77,12 @@ class PatientsRepository(Protocol):
     async def get_dashboard(self, owner_id: str) -> dict:
         ...
 
+    async def list_distinct_tags(self, owner_id: str) -> list[str]:
+        ...
+
+    async def list_distinct_allergies(self, owner_id: str) -> list[str]:
+        ...
+
 
 class PatientQuotaChecker(Protocol):
     """Dependency-inversion seam so `patients` can enforce a nutritionist's

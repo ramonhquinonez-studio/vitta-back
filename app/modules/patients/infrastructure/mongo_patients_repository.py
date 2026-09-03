@@ -61,6 +61,16 @@ class MongoPatientsRepository:
             {"owner_id": owner_oid, "archived_at": None}
         )
 
+    async def list_distinct_tags(self, owner_id: str) -> list[str]:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        values = await self._db.patients.distinct("tags", {"owner_id": owner_oid})
+        return sorted({v for v in values if v})
+
+    async def list_distinct_allergies(self, owner_id: str) -> list[str]:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        values = await self._db.patients.distinct("allergies", {"owner_id": owner_oid})
+        return sorted({v for v in values if v})
+
     async def create_for_owner(self, owner_id: str, payload: dict) -> Patient:
         owner_oid = self._as_oid(owner_id, field_name="owner")
         document = dict(payload)

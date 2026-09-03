@@ -66,6 +66,7 @@ class MongoRecipesRepository:
             "ingredients": payload.get("ingredients") or [],
             "steps": payload.get("steps") or [],
             "url": payload.get("url"),
+            "eating_out_option": payload.get("eating_out_option"),
         }
         result = await self._db.recipe_collections.update_one(
             {"_id": collection_oid, "owner_id": owner_oid},
@@ -132,6 +133,7 @@ class MongoRecipesRepository:
             ingredients=list(recipe.get("ingredients") or []),
             steps=list(recipe.get("steps") or []),
             url=recipe.get("url"),
+            eating_out_option=recipe.get("eating_out_option"),
         )
 
     def _as_oid(self, id_str: str, field_name: str = "id") -> ObjectId:

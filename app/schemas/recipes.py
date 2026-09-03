@@ -2,6 +2,21 @@ from pydantic import BaseModel, Field
 from typing import Any, List, Optional
 
 
+class RecipeEatingOutOption(BaseModel):
+    """An eating-out alternative for this recipe's meal slot — mirrors
+    `app.schemas.plan.EatingOutOption`'s exact shape, since a recipe's
+    linked option gets copied into a `PlanMeal.eating_out_options` entry
+    verbatim when the recipe is used in a plan (`nutri_pro`'s
+    `linkRecipe`/`useFullRecipe`)."""
+
+    restaurant: str
+    dish: str
+    kcal: Optional[float] = None
+    protein: Optional[float] = None
+    carbs: Optional[float] = None
+    fat: Optional[float] = None
+
+
 class RecipeOut(BaseModel):
     id: str
     title: str
@@ -12,6 +27,7 @@ class RecipeOut(BaseModel):
     ingredients: List[dict[str, Any]] = []
     steps: List[str] = []
     url: Optional[str] = None
+    eating_out_option: Optional[RecipeEatingOutOption] = None
 
 
 class RecipeCollectionOut(BaseModel):
@@ -40,6 +56,7 @@ class RecipeIn(BaseModel):
     ingredients: List[dict[str, Any]] = []
     steps: List[str] = []
     url: Optional[str] = None
+    eating_out_option: Optional[RecipeEatingOutOption] = None
 
 
 class RecipeUpdate(BaseModel):
@@ -51,3 +68,4 @@ class RecipeUpdate(BaseModel):
     ingredients: Optional[List[dict[str, Any]]] = None
     steps: Optional[List[str]] = None
     url: Optional[str] = None
+    eating_out_option: Optional[RecipeEatingOutOption] = None

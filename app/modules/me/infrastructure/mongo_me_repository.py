@@ -455,11 +455,17 @@ class MongoMeRepository:
         }
 
     async def list_recommendations(
-        self, owner_id: str | None, *, kind: str | None = None
+        self, owner_id: str | None, patient_id: str, *, kind: str | None = None
     ) -> list[dict]:
         if not owner_id:
             return []
-        filters: dict = {"owner_id": self._as_oid(owner_id)}
+        assignment_cursor = self._db.recommendation_assignments.find(
+            {"owner_id": self._as_oid(owner_id), "patient_id": self._as_oid(patient_id)}
+        )
+        assigned_ids = [doc["recommendation_id"] async for doc in assignment_cursor]
+        if not assigned_ids:
+            return []
+        filters: dict = {"_id": {"$in": assigned_ids}}
         if kind:
             filters["kind"] = kind
         cursor = self._db.recommendations.find(filters).sort("created_at", -1)
@@ -478,6 +484,7 @@ class MongoMeRepository:
                 "price": doc.get("price"),
                 "rating": doc.get("rating"),
                 "emoji": doc.get("emoji"),
+                "equivalency_group_id": doc.get("equivalency_group_id"),
             }
             async for doc in cursor
         ]

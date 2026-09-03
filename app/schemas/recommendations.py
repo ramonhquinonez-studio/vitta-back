@@ -4,6 +4,7 @@ from typing import List, Optional
 
 class RecommendationOut(BaseModel):
     id: str
+    owner_id: Optional[str] = None
     kind: str
     title: str
     subtitle: Optional[str] = None
@@ -16,6 +17,7 @@ class RecommendationOut(BaseModel):
     price: Optional[str] = None
     rating: Optional[float] = None
     emoji: Optional[str] = None
+    equivalency_group_id: Optional[str] = None
 
 
 class RecommendationCreate(BaseModel):
@@ -31,6 +33,16 @@ class RecommendationCreate(BaseModel):
     price: Optional[str] = Field(None, max_length=40)
     rating: Optional[float] = Field(None, ge=0, le=5)
     emoji: Optional[str] = Field(None, max_length=8)
+    # Only meaningful for kind="brand" — see Recommendation.equivalency_group_id.
+    equivalency_group_id: Optional[str] = Field(None, max_length=60)
+
+
+class RecommendationAssignRequest(BaseModel):
+    patient_ids: List[str] = Field(..., min_length=1, max_length=200)
+
+
+class RecommendationAssignmentsOut(BaseModel):
+    patient_ids: List[str] = []
 
 
 class RecommendationBulkCreate(BaseModel):
@@ -49,3 +61,4 @@ class RecommendationUpdate(BaseModel):
     price: Optional[str] = Field(None, max_length=40)
     rating: Optional[float] = Field(None, ge=0, le=5)
     emoji: Optional[str] = Field(None, max_length=8)
+    equivalency_group_id: Optional[str] = Field(None, max_length=60)

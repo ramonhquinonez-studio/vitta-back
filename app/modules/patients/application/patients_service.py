@@ -134,6 +134,12 @@ class PatientsService:
     async def get_dashboard(self, owner_id: str) -> dict:
         return await self._repository.get_dashboard(owner_id)
 
+    async def list_known_tags(self, owner_id: str) -> list[str]:
+        return await self._repository.list_distinct_tags(owner_id)
+
+    async def list_known_allergies(self, owner_id: str) -> list[str]:
+        return await self._repository.list_distinct_allergies(owner_id)
+
     async def claim_patient(self, owner_id: str, code: str) -> Patient:
         if self._quota_checker is not None:
             await self._quota_checker.check(owner_id)

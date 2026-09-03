@@ -12,6 +12,12 @@ class Recipe:
     ingredients: list[dict] = field(default_factory=list)
     steps: list[str] = field(default_factory=list)
     url: str | None = None
+    # An eating-out alternative for this recipe's meal slot — a plain
+    # {restaurant, dish, kcal, protein, carbs, fat} dict, copied verbatim
+    # into a PlanMeal's eating_out_options when the recipe is used in a
+    # plan. Kept loose here (not its own dataclass), matching this
+    # entity's existing `ingredients: list[dict]` looseness.
+    eating_out_option: dict | None = None
 
 
 @dataclass(frozen=True)

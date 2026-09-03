@@ -100,7 +100,7 @@ class MeRepository(Protocol):
         ...
 
     async def list_recommendations(
-        self, owner_id: str | None, *, kind: str | None = None
+        self, owner_id: str | None, patient_id: str, *, kind: str | None = None
     ) -> list[dict]:
         ...
 

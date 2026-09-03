@@ -47,6 +47,7 @@ def _serialize_recipe(recipe: Recipe) -> dict:
         "ingredients": recipe.ingredients,
         "steps": recipe.steps,
         "url": recipe.url,
+        "eating_out_option": recipe.eating_out_option,
     }
 
 

@@ -4,6 +4,8 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.core.deps import get_current_user, require_role
 from app.db.mongo import get_db
 from app.schemas.recommendations import (
+    RecommendationAssignmentsOut,
+    RecommendationAssignRequest,
     RecommendationBulkCreate,
     RecommendationCreate,
     RecommendationOut,
@@ -38,6 +40,7 @@ def _owner_id(current) -> str:
 def _serialize(rec: Recommendation) -> dict:
     return {
         "id": rec.id,
+        "owner_id": rec.owner_id,
         "kind": rec.kind,
         "title": rec.title,
         "subtitle": rec.subtitle,
@@ -50,6 +53,7 @@ def _serialize(rec: Recommendation) -> dict:
         "price": rec.price,
         "rating": rec.rating,
         "emoji": rec.emoji,
+        "equivalency_group_id": rec.equivalency_group_id,
     }
 
 
@@ -60,6 +64,19 @@ async def list_my_recommendations(
     service: RecommendationsService = Depends(get_recommendations_service),
 ):
     items = await service.list_my_recommendations(_owner_id(current), kind=kind)
+    return [_serialize(r) for r in items]
+
+
+@router.get("/platform", response_model=list[RecommendationOut])
+async def list_platform_recommendations(
+    kind: str | None = Query(None, pattern="^(supplement|brand)$"),
+    current=Depends(get_current_user),
+    service: RecommendationsService = Depends(get_recommendations_service),
+):
+    """Platform-curated recommendations (`owner_id: None`) — the "Biblioteca
+    pública" tab. A nutritionist copies one into their own list (via the
+    regular POST) before assigning it to patients."""
+    items = await service.list_platform_recommendations(kind=kind)
     return [_serialize(r) for r in items]
 
 
@@ -119,3 +136,45 @@ async def delete_recommendation(
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"ok": True}
+
+
+@router.post("/{recommendation_id}/assign")
+async def assign_recommendation(
+    recommendation_id: str,
+    payload: RecommendationAssignRequest,
+    current=Depends(get_current_user),
+    service: RecommendationsService = Depends(get_recommendations_service),
+):
+    try:
+        count = await service.assign_to_patients(
+            _owner_id(current), recommendation_id, payload.patient_ids
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"assigned": count}
+
+
+@router.delete("/{recommendation_id}/assign/{patient_id}")
+async def unassign_recommendation(
+    recommendation_id: str,
+    patient_id: str,
+    current=Depends(get_current_user),
+    service: RecommendationsService = Depends(get_recommendations_service),
+):
+    try:
+        await service.unassign_from_patient(_owner_id(current), recommendation_id, patient_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+@router.get("/{recommendation_id}/assignments", response_model=RecommendationAssignmentsOut)
+async def list_recommendation_assignments(
+    recommendation_id: str,
+    current=Depends(get_current_user),
+    service: RecommendationsService = Depends(get_recommendations_service),
+):
+    patient_ids = await service.list_assignments(_owner_id(current), recommendation_id)
+    return {"patient_ids": patient_ids}

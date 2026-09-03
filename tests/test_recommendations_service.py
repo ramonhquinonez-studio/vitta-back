@@ -10,6 +10,7 @@ class _FakeRecommendationsRepository:
     def __init__(self):
         self.items: dict[str, list[Recommendation]] = {}
         self.sequence = 1
+        self.assignments: dict[tuple[str, str], set[str]] = {}
 
     async def list_for_owner(self, owner_id, *, kind=None):
         items = self.items.get(owner_id, [])
@@ -17,12 +18,41 @@ class _FakeRecommendationsRepository:
             items = [r for r in items if r.kind == kind]
         return items
 
+    async def list_platform_recommendations(self, *, kind=None):
+        items = self.items.get(None, [])
+        if kind:
+            items = [r for r in items if r.kind == kind]
+        return items
+
+    def _owns(self, owner_id, rec_id):
+        return self._find(owner_id, rec_id) is not None
+
+    async def assign_to_patients(self, owner_id, recommendation_id, patient_ids):
+        if not self._owns(owner_id, recommendation_id):
+            return 0
+        key = (owner_id, recommendation_id)
+        assigned = self.assignments.setdefault(key, set())
+        assigned.update(patient_ids)
+        return len(patient_ids)
+
+    async def unassign_from_patient(self, owner_id, recommendation_id, patient_id):
+        key = (owner_id, recommendation_id)
+        assigned = self.assignments.get(key, set())
+        if patient_id not in assigned:
+            return False
+        assigned.discard(patient_id)
+        return True
+
+    async def list_assigned_patient_ids(self, owner_id, recommendation_id):
+        return sorted(self.assignments.get((owner_id, recommendation_id), set()))
+
     async def create_for_owner(self, owner_id, payload):
         rec = Recommendation(
             id=f"rec-{self.sequence}",
             owner_id=owner_id,
             kind=payload["kind"],
             title=payload["title"],
+            equivalency_group_id=payload.get("equivalency_group_id"),
         )
         self.sequence += 1
         self.items.setdefault(owner_id, []).append(rec)
@@ -74,6 +104,17 @@ class RecommendationsServiceTest(unittest.IsolatedAsyncioTestCase):
             await service.create_recommendation(
                 "owner-1", {"kind": "invalid", "title": "Omega 3"}
             )
+
+    async def test_create_brand_recommendation_persists_the_equivalency_group(self):
+        repository = _FakeRecommendationsRepository()
+        service = RecommendationsService(repository)
+
+        created = await service.create_recommendation(
+            "owner-1",
+            {"kind": "brand", "title": "Nutrioli", "equivalency_group_id": "aceites_sin_proteina"},
+        )
+
+        self.assertEqual(created.equivalency_group_id, "aceites_sin_proteina")
 
     async def test_create_then_list_filters_by_kind(self):
         repository = _FakeRecommendationsRepository()
@@ -143,6 +184,64 @@ class RecommendationsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(LookupError):
             await service.update_recommendation("owner-2", created.id, {"price": "$1"})
+
+    async def test_list_platform_recommendations_returns_owner_less_items(self):
+        repository = _FakeRecommendationsRepository()
+        service = RecommendationsService(repository)
+        await service.create_recommendation(None, {"kind": "supplement", "title": "Vitamina D"})
+        await service.create_recommendation("owner-1", {"kind": "supplement", "title": "Omega 3"})
+
+        platform = await service.list_platform_recommendations()
+
+        self.assertEqual(len(platform), 1)
+        self.assertEqual(platform[0].title, "Vitamina D")
+
+    async def test_assign_then_list_then_unassign(self):
+        repository = _FakeRecommendationsRepository()
+        service = RecommendationsService(repository)
+        created = await service.create_recommendation(
+            "owner-1", {"kind": "supplement", "title": "Omega 3"}
+        )
+
+        count = await service.assign_to_patients("owner-1", created.id, ["patient-1", "patient-2"])
+        self.assertEqual(count, 2)
+
+        assigned = await service.list_assignments("owner-1", created.id)
+        self.assertCountEqual(assigned, ["patient-1", "patient-2"])
+
+        await service.unassign_from_patient("owner-1", created.id, "patient-1")
+        assigned = await service.list_assignments("owner-1", created.id)
+        self.assertEqual(assigned, ["patient-2"])
+
+    async def test_assign_requires_at_least_one_patient(self):
+        repository = _FakeRecommendationsRepository()
+        service = RecommendationsService(repository)
+        created = await service.create_recommendation(
+            "owner-1", {"kind": "supplement", "title": "Omega 3"}
+        )
+
+        with self.assertRaises(ValueError):
+            await service.assign_to_patients("owner-1", created.id, [])
+
+    async def test_assign_rejects_a_recommendation_not_owned(self):
+        repository = _FakeRecommendationsRepository()
+        service = RecommendationsService(repository)
+        created = await service.create_recommendation(
+            "owner-1", {"kind": "supplement", "title": "Omega 3"}
+        )
+
+        with self.assertRaises(LookupError):
+            await service.assign_to_patients("owner-2", created.id, ["patient-1"])
+
+    async def test_unassign_rejects_a_nonexistent_assignment(self):
+        repository = _FakeRecommendationsRepository()
+        service = RecommendationsService(repository)
+        created = await service.create_recommendation(
+            "owner-1", {"kind": "supplement", "title": "Omega 3"}
+        )
+
+        with self.assertRaises(LookupError):
+            await service.unassign_from_patient("owner-1", created.id, "patient-1")
 
 
 if __name__ == "__main__":

@@ -35,6 +35,8 @@ from app.routers import (
     checkin as checkin_router,
     workout_plans as workout_plans_router,
     exercise_library as exercise_library_router,
+    eating_out_options as eating_out_options_router,
+    places_lookup as places_lookup_router,
 )
 
 @asynccontextmanager
@@ -92,6 +94,8 @@ app.include_router(messaging_router.router, tags=["messaging"])
 app.include_router(checkin_router.router, tags=["checkin"])
 app.include_router(workout_plans_router.router, tags=["workout_plans"])
 app.include_router(exercise_library_router.router, tags=["exercise_library"])
+app.include_router(eating_out_options_router.router, tags=["eating_out_options"])
+app.include_router(places_lookup_router.router, tags=["places_lookup"])
 
 os.makedirs(settings.UPLOADS_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.UPLOADS_DIR), name="uploads")

@@ -143,6 +143,16 @@ class _FakePatientsRepository:
     async def get_dashboard(self, owner_id):
         return self.dashboard_data
 
+    async def list_distinct_tags(self, owner_id):
+        values = {t for p in self.patients.values() if p.owner_id == owner_id for t in p.tags}
+        return sorted(values)
+
+    async def list_distinct_allergies(self, owner_id):
+        values = {
+            a for p in self.patients.values() if p.owner_id == owner_id for a in p.allergies
+        }
+        return sorted(values)
+
     async def toggle_coach_workout_log(
         self, owner_id, patient_id, *, workout_plan_id, day_index, exercise_index
     ):
@@ -564,6 +574,27 @@ class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
             await service.toggle_workout_log(
                 "owner-1", patient.id, {"workout_plan_id": "wp1"}
             )
+
+    async def test_list_known_tags_returns_distinct_values_scoped_to_owner(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        await repository.create_for_owner("owner-1", {"name": "Maria", "tags": ["VIP", "Grupo A"]})
+        await repository.create_for_owner("owner-1", {"name": "Mario", "tags": ["Grupo A"]})
+        await repository.create_for_owner("owner-2", {"name": "Otro", "tags": ["No visible"]})
+
+        tags = await service.list_known_tags("owner-1")
+
+        self.assertEqual(tags, ["Grupo A", "VIP"])
+
+    async def test_list_known_allergies_returns_distinct_values_scoped_to_owner(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        await repository.create_for_owner("owner-1", {"name": "Maria", "allergies": ["Gluten", "Nueces"]})
+        await repository.create_for_owner("owner-1", {"name": "Mario", "allergies": ["Gluten"]})
+
+        allergies = await service.list_known_allergies("owner-1")
+
+        self.assertEqual(allergies, ["Gluten", "Nueces"])
 
     async def test_toggle_workout_log_rejects_a_patient_not_owned(self):
         repository = _FakePatientsRepository()

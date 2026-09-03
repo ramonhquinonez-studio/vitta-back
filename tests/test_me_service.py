@@ -126,7 +126,8 @@ class _FakeMeRepository:
         self.food_diary_entries.append(entry)
         return entry
 
-    async def list_recommendations(self, owner_id, *, kind=None):
+    async def list_recommendations(self, owner_id, patient_id, *, kind=None):
+        self.list_recommendations_patient_id = patient_id
         if not owner_id:
             return []
         items = [
@@ -457,6 +458,14 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
         result = await service.list_recommendations("user-1")
 
         self.assertEqual(result, [])
+
+    async def test_list_recommendations_passes_the_calling_patient_id(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+
+        await service.list_recommendations("user-1")
+
+        self.assertEqual(repository.list_recommendations_patient_id, "patient-1")
 
     async def test_add_hydration_clamps_between_zero_and_target(self):
         repository = _FakeMeRepository()

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 @dataclass(frozen=True)
 class Recommendation:
     id: str
-    owner_id: str
+    owner_id: str | None
     kind: str  # "supplement" | "brand"
     title: str
     subtitle: str | None = None
@@ -17,3 +17,9 @@ class Recommendation:
     price: str | None = None
     rating: float | None = None
     emoji: str | None = None
+    # Only meaningful for kind="brand": ties this recommendation to one of
+    # the fixed SMAE equivalency-group ids (`equivalencies` module), so a
+    # patient's plan can surface "best brand for this menu item" against
+    # whichever brand recommendation their nutritionist assigned for the
+    # same group.
+    equivalency_group_id: str | None = None

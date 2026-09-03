@@ -163,6 +163,27 @@ async def create_patient_invite_code(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get("/tags", response_model=list[str])
+async def list_known_tags(
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+):
+    """Distinct tag values already used across this nutritionist's own
+    patients — feeds a suggestion chip-input on the patient form rather
+    than an open-ended free-text field."""
+    return await service.list_known_tags(_owner_id(current))
+
+
+@router.get("/allergies", response_model=list[str])
+async def list_known_allergies(
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+):
+    """Distinct allergy values already used across this nutritionist's own
+    patients — same suggestion purpose as `list_known_tags`."""
+    return await service.list_known_allergies(_owner_id(current))
+
+
 @router.get("/{patient_id}", response_model=PatientOut)
 async def get_patient(
     patient_id: str,
