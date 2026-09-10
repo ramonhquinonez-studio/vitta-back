@@ -125,6 +125,14 @@ class _FakePatientsRepository:
             return None
         return self.measurements.get(patient_id, [])
 
+    async def add_measurement(self, owner_id, patient_id, payload):
+        patient = await self.get_for_owner(owner_id, patient_id)
+        if patient is None:
+            return None
+        row = {"id": f"m{len(self.measurements.get(patient_id, []))}", **payload}
+        self.measurements.setdefault(patient_id, []).append(row)
+        return row
+
     async def list_checkin_responses(self, owner_id, patient_id):
         patient = await self.get_for_owner(owner_id, patient_id)
         if patient is None:
@@ -346,6 +354,26 @@ class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(LookupError):
             await service.list_measurements("owner-2", patient.id)
+
+    async def test_add_measurement_records_circumferences_for_an_owned_patient(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+
+        created = await service.add_measurement(
+            "owner-1", patient.id, {"circumferences": {"waist": 82.0, "hip": 98.0}}
+        )
+
+        self.assertEqual(created["circumferences"], {"waist": 82.0, "hip": 98.0})
+        self.assertEqual(len(repository.measurements[patient.id]), 1)
+
+    async def test_add_measurement_rejects_a_patient_not_owned(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+
+        with self.assertRaises(LookupError):
+            await service.add_measurement("owner-2", patient.id, {"circumferences": {"arm": 30}})
 
     async def test_list_checkin_responses_returns_the_patients_submitted_responses(self):
         repository = _FakePatientsRepository()

@@ -212,12 +212,55 @@ class MongoPatientsRepository:
                 "weight_kg": doc.get("weight_kg"),
                 "body_fat_pct": doc.get("body_fat_pct"),
                 "waist_cm": doc.get("waist_cm"),
+                "circumferences": doc.get("circumferences") or {},
                 "notes": doc.get("notes"),
                 "attachment_url": doc.get("attachment_url"),
                 "attachment_type": doc.get("attachment_type"),
             }
             async for doc in cursor
         ]
+
+    async def add_measurement(self, owner_id: str, patient_id: str, payload: dict) -> dict | None:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        patient_oid = self._as_oid(patient_id)
+        owned = await self._db.patients.find_one({"_id": patient_oid, "owner_id": owner_oid})
+        if owned is None:
+            return None
+
+        at_value = payload.get("at")
+        try:
+            at_dt = (
+                datetime.fromisoformat(at_value.replace("Z", "+00:00"))
+                if isinstance(at_value, str)
+                else (at_value or datetime.utcnow())
+            )
+        except Exception:
+            at_dt = datetime.utcnow()
+
+        document = {
+            "owner_id": owner_oid,
+            "patient_id": patient_oid,
+            "at": at_dt,
+            "weight_kg": payload.get("weight_kg"),
+            "body_fat_pct": payload.get("body_fat_pct"),
+            "waist_cm": payload.get("waist_cm"),
+            "circumferences": payload.get("circumferences") or None,
+            "notes": payload.get("notes"),
+            "created_at": datetime.utcnow(),
+        }
+        result = await self._db.measurements.insert_one(document)
+        document["_id"] = result.inserted_id
+        return {
+            "id": str(document["_id"]),
+            "at": document["at"],
+            "weight_kg": document["weight_kg"],
+            "body_fat_pct": document["body_fat_pct"],
+            "waist_cm": document["waist_cm"],
+            "circumferences": document["circumferences"] or {},
+            "notes": document["notes"],
+            "attachment_url": None,
+            "attachment_type": None,
+        }
 
     async def list_workout_plan_assignments(self, owner_id: str, patient_id: str) -> list[dict] | None:
         owner_oid = self._as_oid(owner_id, field_name="owner")

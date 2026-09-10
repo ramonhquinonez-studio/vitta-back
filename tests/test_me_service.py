@@ -80,6 +80,7 @@ class _FakeMeRepository:
             "weight_kg": payload.get("weight_kg"),
             "body_fat_pct": payload.get("body_fat_pct"),
             "waist_cm": payload.get("waist_cm"),
+            "circumferences": payload.get("circumferences") or {},
             "notes": payload.get("notes"),
             "attachment_url": payload.get("attachment_url"),
             "attachment_type": payload.get("attachment_type"),
@@ -325,6 +326,32 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(PermissionError):
             await service.add_measurement("user-1", {"weight_kg": 80.0})
         self.assertIsNone(repository.created_measurement_payload)
+
+    async def test_add_body_measurements_stores_circumferences(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+
+        result = await service.add_body_measurements(
+            "user-1", {"circumferences": {"waist": 82.5, "hip": 98.0}}
+        )
+
+        self.assertEqual(
+            repository.created_measurement_payload["circumferences"],
+            {"waist": 82.5, "hip": 98.0},
+        )
+        self.assertEqual(result["circumferences"], {"waist": 82.5, "hip": 98.0})
+
+    async def test_add_body_measurements_requires_at_least_one(self):
+        service = MeService(_FakeMeRepository())
+        with self.assertRaises(ValueError):
+            await service.add_body_measurements("user-1", {"circumferences": {}})
+
+    async def test_add_body_measurements_rejected_when_progress_log_disabled(self):
+        repository = _FakeMeRepository()
+        repository.patient["progress_log_enabled"] = False
+        service = MeService(repository)
+        with self.assertRaises(PermissionError):
+            await service.add_body_measurements("user-1", {"circumferences": {"arm": 30}})
 
     async def test_update_profile_cannot_change_progress_log_enabled(self):
         # The /me router strips it; the service itself is agnostic, but this

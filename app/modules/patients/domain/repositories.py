@@ -45,6 +45,9 @@ class PatientsRepository(Protocol):
     async def list_measurements(self, owner_id: str, patient_id: str) -> list[dict] | None:
         ...
 
+    async def add_measurement(self, owner_id: str, patient_id: str, payload: dict) -> dict | None:
+        ...
+
     async def list_checkin_responses(self, owner_id: str, patient_id: str) -> list[dict] | None:
         ...
 

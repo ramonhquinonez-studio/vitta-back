@@ -85,7 +85,10 @@
 - `081-back-stripe-live-integration-fixes`  *(SDK v15 `.get()`, current-API `confirmation_secret`, `STRIPE_PRICE_PRO` config, refund transfer-reversal — subscription + Connect consultation flows live-verified in test mode)*
 - `082-back-payment-methods-stripeobject-fix`  *(`payment_methods_service` `.get()` bug — 500 on the billing page — + card-sheet overflow + incomplete-subscription display; found running the Flutter clients on an emulator)*
 - `083-back-patient-progress-log-toggle`  *(patient doc `progress_log_enabled`; nutritionist-only `PATCH /patients/{id}`; `POST /me/measurements` 403 when off; `/me/profile` exposes it; `PATCH /me/profile` strips it. Cross-repo: `nutri_pro` `112`, `nutri_app` `070`.)*
+- `084-back-body-measurements`  *(`measurements.circumferences` map; `POST /me/body-measurements` + `POST /patients/{id}/measurements`; backs the body figure — `nutri_app` `072` / `nutri_pro` `113`.)*
 - *(fix)* `StripeBillingProvider.parse_webhook_event` — the deprecated `/billing/webhook` path (`BILLING_PROVIDER=stripe` only) still read `.get()` on a raw `stripe.Event`; now `as_dict()`-normalized like the rest of `081`.
+
+- `113-front-body-figure-measurements` *(interactive body figure on patient detail — read + record tape-measure circumferences; backend `084`, patient side `nutri_app` `072`)*
 
 ## Next Recommended Specs
 

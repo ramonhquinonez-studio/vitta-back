@@ -8,6 +8,7 @@ from app.core.deps import get_current_user
 from app.core.notify import send_push_to_tokens
 from app.core.storage import save_upload
 from app.db.mongo import get_db
+from app.schemas.body_measurements import BodyMeasurementsIn
 from app.schemas.checkin import FormResponseCreate, FormResponseOut, FormTemplateOut
 from app.schemas.messaging import MessageIn, MessageOut
 from app.schemas.patients import PatientUpdate
@@ -218,6 +219,25 @@ async def add_measurement(
     }
     try:
         return await service.add_measurement(_user_id(current), payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/body-measurements", response_model=dict, status_code=201)
+async def add_body_measurements(
+    payload: BodyMeasurementsIn,
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    """Circumference readings from the interactive body figure (spec 084)."""
+    try:
+        return await service.add_body_measurements(
+            _user_id(current), payload.model_dump(exclude_none=True)
+        )
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except LookupError as exc:
