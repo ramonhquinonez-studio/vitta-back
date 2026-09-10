@@ -12,6 +12,7 @@ from app.modules.billing.presentation.router import get_billing_service
 from app.modules.nutritionist_profile.presentation.router import get_nutritionist_profile_service
 from app.schemas.auth import InviteCodeOut
 from app.schemas.pagination import Page, PaginationParams
+from app.schemas.body_measurements import BodyMeasurementsIn
 from app.schemas.patients import ClaimPatientIn, PatientIn, PatientOut, PatientUpdate
 
 from ..application.patients_service import PatientsService
@@ -371,6 +372,25 @@ async def list_patient_measurements(
         return await service.list_measurements(_owner_id(current), patient_id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/{patient_id}/measurements", response_model=dict, status_code=201)
+async def add_patient_measurement(
+    patient_id: str,
+    payload: BodyMeasurementsIn,
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+):
+    """A tape-measure / circumference reading recorded by the nutritionist
+    for a patient (spec 084 — the interactive body figure)."""
+    try:
+        return await service.add_measurement(
+            _owner_id(current), patient_id, payload.model_dump(exclude_none=True)
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/{patient_id}/checkin-responses", response_model=list[dict])

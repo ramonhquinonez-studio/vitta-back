@@ -264,6 +264,23 @@ class MeService:
             payload=payload,
         )
 
+    async def add_body_measurements(self, user_id: str, payload: dict[str, Any]) -> dict:
+        """Circumference set from the patient's interactive body figure
+        (spec 084) — a `measurements` doc with no photo. Same self-log gate
+        as `add_measurement` (spec 083)."""
+        patient = await self._require_patient(user_id)
+        if patient.get("progress_log_enabled", True) is False:
+            raise PermissionError(
+                "Tu nutriólogo desactivó el registro de progreso."
+            )
+        if not payload.get("circumferences") and payload.get("waist_cm") is None:
+            raise ValueError("Registra al menos una medida.")
+        return await self._repository.create_measurement(
+            owner_id=patient.get("owner_id"),
+            patient_id=patient["id"],
+            payload=payload,
+        )
+
     async def get_progress(self, user_id: str, range_value: str | None) -> dict[str, Any]:
         patient = await self._repository.get_patient_for_user(user_id)
         if not patient:
