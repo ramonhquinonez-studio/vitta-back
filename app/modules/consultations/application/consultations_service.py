@@ -3,12 +3,20 @@ from ..domain.repositories import ConsultationsRepository
 
 
 class ConsultationsService:
-    def __init__(self, repository: ConsultationsRepository, appointments_repository=None):
+    def __init__(
+        self,
+        repository: ConsultationsRepository,
+        appointments_repository=None,
+        patients_repository=None,
+    ):
         self._repository = repository
         # Optional: keeps the linked appointment's status in sync with the
         # consultation's own status. None in contexts (tests) that don't
         # care about that side effect.
         self._appointments_repository = appointments_repository
+        # Optional: used only by list_consultations to attach each row's
+        # patient name for list UIs (dashboard "Consultas en progreso").
+        self._patients_repository = patients_repository
 
     async def start(
         self, owner_id: str, *, patient_id: str, appointment_id: str | None
@@ -33,6 +41,43 @@ class ConsultationsService:
         if consultation is None:
             raise LookupError("Consultation not found")
         return consultation
+
+    async def list_consultations(
+        self,
+        owner_id: str,
+        *,
+        status: str | None = None,
+        patient_id: str | None = None,
+    ) -> list[tuple[Consultation, str | None]]:
+        """Returns (consultation, patient_name) pairs — the name is resolved
+        here (when a patients repository is available) so list UIs don't have
+        to fan out one lookup per row."""
+        consultations = await self._repository.list_for_owner(
+            owner_id, status=status, patient_id=patient_id
+        )
+        names: dict[str, str | None] = {}
+        if self._patients_repository is not None:
+            for consultation in consultations:
+                if consultation.patient_id in names:
+                    continue
+                try:
+                    patient = await self._patients_repository.get_for_owner(
+                        owner_id, consultation.patient_id
+                    )
+                except Exception:
+                    patient = None
+                names[consultation.patient_id] = getattr(patient, "name", None)
+        return [(c, names.get(c.patient_id)) for c in consultations]
+
+    async def delete(self, owner_id: str, consultation_id: str) -> None:
+        current = await self._repository.get_for_owner(owner_id, consultation_id)
+        if current is None:
+            raise LookupError("Consultation not found")
+        if current.status != "draft":
+            raise ValueError("Only a draft consultation can be discarded")
+        deleted = await self._repository.delete_for_owner(owner_id, consultation_id)
+        if not deleted:
+            raise LookupError("Consultation not found")
 
     async def update_consultation(
         self,
@@ -169,12 +214,14 @@ class ConsultationsService:
         consultation_id: str,
         *,
         private_notes: str | None,
+        plan_id: str | None = None,
         next_appointment_id: str | None,
     ) -> Consultation:
         updates = {
             key: value
             for key, value in {
                 "private_notes": private_notes,
+                "plan_id": plan_id,
                 "next_appointment_id": next_appointment_id,
             }.items()
             if value is not None

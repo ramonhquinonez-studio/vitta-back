@@ -101,3 +101,21 @@ async def ensure_indexes() -> None:
 
     # ---------- CHECK-IN RESPONSES ----------
     await db.checkin_responses.create_index([("patient_id", 1), ("submitted_at", -1)])
+
+    # ---------- PAYMENTS (Stripe) ----------
+    await db.stripe_customers.create_index("user_id", unique=True)
+    # Webhook idempotency store — `_id` is the Stripe event id. TTL so
+    # processed events don't accumulate (30d is past any retry window).
+    await db.stripe_webhook_events.create_index("received_at", expireAfterSeconds=2592000)
+    # Connect (spec 079): one Express account per nutritionist.
+    await db.stripe_connect_accounts.create_index("owner_id", unique=True)
+    await db.stripe_connect_accounts.create_index("account_id")
+    # Consultation-payment ledger.
+    await db.payments.create_index("payment_intent_id", unique=True)
+    await db.payments.create_index([("patient_id", 1), ("created_at", -1)])
+    await db.payments.create_index([("nutritionist_id", 1), ("created_at", -1)])
+    await db.payments.create_index("consultation_id")
+
+    # ---------- BOOKING PROTECTION (spec 080) ----------
+    # One booking policy per nutritionist.
+    await db.booking_policies.create_index("owner_id", unique=True)

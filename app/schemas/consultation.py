@@ -57,6 +57,7 @@ class ConsultationMenuIn(BaseModel):
 
 class ConsultationCloseIn(BaseModel):
     private_notes: str | None = Field(default=None, validation_alias="privateNotes")
+    plan_id: str | None = Field(default=None, validation_alias="planId")
     next_appointment_id: str | None = Field(default=None, validation_alias="nextAppointmentId")
     model_config = ConfigDict(populate_by_name=True)
 
@@ -101,7 +102,11 @@ class ConsultationOut(BaseModel):
     distribution: DistributionInputOut | None = None
     menu_allocations: List[MenuAllocationItemOut] | None = None
     private_notes: str | None = None
+    plan_id: str | None = None
     next_appointment_id: str | None = None
     completed_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    # Populated only by the list endpoint (GET /consultations); None on
+    # single-consultation responses.
+    patient_name: str | None = None

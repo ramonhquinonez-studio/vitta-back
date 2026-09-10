@@ -13,6 +13,11 @@ from app.schemas.messaging import MessageIn, MessageOut
 from app.schemas.patients import PatientUpdate
 from app.schemas.workout_log import WorkoutExerciseLogIn
 
+from app.modules.booking_policy.application.booking_policy_service import BookingPolicyService
+from app.modules.booking_policy.infrastructure.mongo_booking_policy_repository import (
+    MongoBookingPolicyRepository,
+)
+
 from ..application.me_service import MeService
 from ..infrastructure.mongo_me_repository import MongoMeRepository
 
@@ -23,7 +28,10 @@ router = APIRouter(prefix="/me", tags=["me"])
 def get_me_service(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MeService:
-    return MeService(MongoMeRepository(db))
+    return MeService(
+        MongoMeRepository(db),
+        booking_policy_service=BookingPolicyService(MongoBookingPolicyRepository(db)),
+    )
 
 
 def _user_id(current) -> str:
@@ -62,6 +70,9 @@ async def update_my_profile(
         for key, value in payload.model_dump().items()
         if value is not None
     }
+    # Nutritionist-only field — a patient must not re-enable their own
+    # progress logging via /me/profile (spec 083).
+    updates.pop("progress_log_enabled", None)
     try:
         return await service.update_profile(_user_id(current), updates)
     except LookupError as exc:
@@ -207,6 +218,8 @@ async def add_measurement(
     }
     try:
         return await service.add_measurement(_user_id(current), payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -474,6 +487,16 @@ async def my_nutritionist_profile(
     service: MeService = Depends(get_me_service),
 ):
     return await service.get_nutritionist_profile(_user_id(current))
+
+
+@router.get("/booking-policy", response_model=dict | None)
+async def my_booking_policy(
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    """The patient's assigned nutritionist's resolved booking policy — shown
+    before booking (spec 080). Null when the patient has no nutritionist."""
+    return await service.get_booking_policy(_user_id(current))
 
 
 @router.get("/food_diary_entries", response_model=list[dict])

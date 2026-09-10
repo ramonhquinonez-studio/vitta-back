@@ -22,3 +22,28 @@ class CheckoutSessionOut(BaseModel):
 
 class CheckoutIn(BaseModel):
     plan_id: str
+
+
+class SubscriptionSheetIn(BaseModel):
+    plan_id: str
+
+
+class SubscriptionSheetOut(BaseModel):
+    subscription_id: str
+    plan_id: str
+    payment_intent_client_secret: str
+    ephemeral_key_secret: str
+    customer_id: str
+    publishable_key: str
+    status: str
+    requires_action: bool
+
+
+class SubscriptionVerifyIn(BaseModel):
+    subscription_id: str
+
+
+class SubscriptionVerifyOut(BaseModel):
+    plan_id: str
+    status: str
+    current_period_end: datetime | None = None

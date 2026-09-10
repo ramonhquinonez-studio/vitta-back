@@ -37,6 +37,11 @@ from app.routers import (
     exercise_library as exercise_library_router,
     eating_out_options as eating_out_options_router,
     places_lookup as places_lookup_router,
+    payments as payments_router,
+    payment_methods as payment_methods_router,
+    stripe_webhooks as stripe_webhooks_router,
+    consultation_payments as consultation_payments_router,
+    booking_policy as booking_policy_router,
 )
 
 @asynccontextmanager
@@ -96,6 +101,22 @@ app.include_router(workout_plans_router.router, tags=["workout_plans"])
 app.include_router(exercise_library_router.router, tags=["exercise_library"])
 app.include_router(eating_out_options_router.router, tags=["eating_out_options"])
 app.include_router(places_lookup_router.router, tags=["places_lookup"])
+app.include_router(payments_router.router)
+app.include_router(payment_methods_router.router)
+app.include_router(stripe_webhooks_router.router)
+app.include_router(consultation_payments_router.router)
+app.include_router(booking_policy_router.router)
+
+# Stripe webhook handlers register themselves with the shared dispatcher.
+from app.modules.billing.application.subscription_webhook_handlers import (  # noqa: E402
+    register as _register_subscription_webhooks,
+)
+from app.modules.payments.application.connect_webhook_handlers import (  # noqa: E402
+    register as _register_connect_webhooks,
+)
+
+_register_subscription_webhooks()
+_register_connect_webhooks()
 
 os.makedirs(settings.UPLOADS_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.UPLOADS_DIR), name="uploads")

@@ -43,6 +43,26 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_PUBLISHABLE_KEY: str = ""
+    # Recurring Stripe Price id for the "Pro" subscription plan (spec 078).
+    # Read by seed_billing_plans.py; empty → the plan seeds with no price and
+    # the native subscription-sheet treats it as free.
+    STRIPE_PRICE_PRO: str = ""
+    # Vitta's cut on patient → nutritionist consultation payments (spec 079),
+    # in basis points. 1000 = 10%.
+    PLATFORM_FEE_BPS: int = 1000
+    STRIPE_CONNECT_COUNTRY: str = "MX"
+
+    @property
+    def stripe_native_enabled(self) -> bool:
+        """True when the native-SDK payment rails (payments/payment_methods/
+        stripe_webhooks) have everything they need. When False those
+        endpoints stay reachable but 503 — the mock billing provider and the
+        hosted-checkout redirect keep working regardless."""
+        return bool(
+            self.STRIPE_SECRET_KEY
+            and self.STRIPE_PUBLISHABLE_KEY
+            and self.STRIPE_WEBHOOK_SECRET
+        )
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

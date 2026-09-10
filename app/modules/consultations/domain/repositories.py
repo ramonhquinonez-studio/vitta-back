@@ -19,6 +19,18 @@ class ConsultationsRepository(Protocol):
     async def get_for_owner(self, owner_id: str, consultation_id: str) -> Consultation | None:
         ...
 
+    async def list_for_owner(
+        self,
+        owner_id: str,
+        *,
+        status: str | None = None,
+        patient_id: str | None = None,
+    ) -> list[Consultation]:
+        ...
+
+    async def delete_for_owner(self, owner_id: str, consultation_id: str) -> bool:
+        ...
+
     async def update_for_owner(
         self, owner_id: str, consultation_id: str, updates: dict
     ) -> Consultation | None:

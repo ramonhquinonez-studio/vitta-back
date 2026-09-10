@@ -49,6 +49,7 @@ class MongoConsultationsRepository:
             "distribution": None,
             "menu_allocations": None,
             "private_notes": None,
+            "plan_id": None,
             "next_appointment_id": None,
             "completed_at": None,
             "created_at": now,
@@ -70,6 +71,30 @@ class MongoConsultationsRepository:
             return None
         return self._to_entity(doc)
 
+    async def list_for_owner(
+        self,
+        owner_id: str,
+        *,
+        status: str | None = None,
+        patient_id: str | None = None,
+    ) -> list[Consultation]:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        query: dict = {"owner_id": owner_oid}
+        if status is not None:
+            query["status"] = status
+        if patient_id is not None:
+            query["patient_id"] = self._oid_maybe(patient_id)
+        cursor = self._db.consultations.find(query).sort("updated_at", -1)
+        return [self._to_entity(doc) async for doc in cursor]
+
+    async def delete_for_owner(self, owner_id: str, consultation_id: str) -> bool:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        consultation_oid = self._as_oid(consultation_id)
+        result = await self._db.consultations.delete_one(
+            {"_id": consultation_oid, "owner_id": owner_oid}
+        )
+        return result.deleted_count > 0
+
     async def update_for_owner(
         self, owner_id: str, consultation_id: str, updates: dict
     ) -> Consultation | None:
@@ -79,6 +104,8 @@ class MongoConsultationsRepository:
         mongo_updates = dict(updates)
         if "appointment_id" in mongo_updates:
             mongo_updates["appointment_id"] = self._oid_maybe(mongo_updates["appointment_id"])
+        if "plan_id" in mongo_updates:
+            mongo_updates["plan_id"] = self._oid_maybe(mongo_updates["plan_id"])
         if "next_appointment_id" in mongo_updates:
             mongo_updates["next_appointment_id"] = self._oid_maybe(
                 mongo_updates["next_appointment_id"]
@@ -177,6 +204,7 @@ class MongoConsultationsRepository:
             distribution=distribution,
             menu_allocations=menu_allocations,
             private_notes=doc.get("private_notes"),
+            plan_id=self._stringify_maybe_oid(doc.get("plan_id")),
             next_appointment_id=self._stringify_maybe_oid(doc.get("next_appointment_id")),
             completed_at=doc.get("completed_at"),
             created_at=doc.get("created_at"),

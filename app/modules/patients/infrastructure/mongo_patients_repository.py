@@ -504,6 +504,7 @@ class MongoPatientsRepository:
             email=document.get("email"),
             phone=document.get("phone"),
             archived_at=document.get("archived_at"),
+            progress_log_enabled=document.get("progress_log_enabled", True),
         )
 
     def _as_oid(self, id_str: str, field_name: str = "id") -> ObjectId:

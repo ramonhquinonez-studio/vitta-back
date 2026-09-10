@@ -28,6 +28,8 @@ class PatientUpdate(BaseModel):
     email: Optional[EmailStr] = None
     phone: Optional[str] = Field(None, max_length=30)
     tags: Optional[List[str]] = None
+    # Nutritionist-only — stripped from the patient's own PATCH /me/profile (spec 083).
+    progress_log_enabled: Optional[bool] = None
 
 class PatientOut(BaseModel):
     id: str
@@ -48,6 +50,7 @@ class PatientOut(BaseModel):
     phone: Optional[str] = None
     archived_at: Optional[datetime] = None
     tags: List[str] = []
+    progress_log_enabled: bool = True
 
 class ClaimPatientIn(BaseModel):
     code: str = Field(..., min_length=4, max_length=40)

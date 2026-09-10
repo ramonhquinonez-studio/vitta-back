@@ -36,3 +36,7 @@ class Patient:
     # Set when the nutritionist archives this chart instead of deleting it —
     # excluded from the default roster/dashboard but still fetchable by id.
     archived_at: datetime | None = None
+    # Whether the patient may self-log progress (`/me/measurements`). Missing
+    # in the document == enabled, so existing patients are unaffected. Only the
+    # nutritionist changes this (spec 083).
+    progress_log_enabled: bool = True

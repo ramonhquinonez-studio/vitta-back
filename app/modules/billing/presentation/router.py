@@ -4,9 +4,24 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db, require_role
-from app.schemas.billing import CheckoutIn, CheckoutSessionOut, SubscriptionOut, SubscriptionPlanOut
+from app.modules.payments.application.stripe_customers import StripeCustomers
+from app.modules.payments.infrastructure.mongo_stripe_customers_repository import (
+    MongoStripeCustomersRepository,
+)
+from app.modules.payments.infrastructure.stripe_client import get_stripe
+from app.schemas.billing import (
+    CheckoutIn,
+    CheckoutSessionOut,
+    SubscriptionOut,
+    SubscriptionPlanOut,
+    SubscriptionSheetIn,
+    SubscriptionSheetOut,
+    SubscriptionVerifyIn,
+    SubscriptionVerifyOut,
+)
 
 from ..application.billing_service import BillingService
+from ..application.stripe_subscriptions_service import StripeSubscriptionsService
 from ..domain.repositories import BillingProviderRepository
 from ..infrastructure.mock_billing_provider import MockBillingProvider
 from ..infrastructure.mongo_billing_repository import MongoBillingRepository
@@ -24,6 +39,19 @@ def get_billing_provider() -> BillingProviderRepository:
 
 def get_billing_service(db: AsyncIOMotorDatabase = Depends(get_db)) -> BillingService:
     return BillingService(MongoBillingRepository(db), get_billing_provider())
+
+
+def get_subscriptions_service(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> StripeSubscriptionsService:
+    stripe = get_stripe()
+    customers = StripeCustomers(stripe, MongoStripeCustomersRepository(db))
+    return StripeSubscriptionsService(MongoBillingRepository(db), stripe, customers)
+
+
+def _require_native() -> None:
+    if not settings.stripe_native_enabled:
+        raise HTTPException(status_code=503, detail="Pagos con tarjeta no disponibles todavía.")
 
 
 def _owner_id(current) -> str:
@@ -82,11 +110,45 @@ async def open_portal(
     return CheckoutSessionOut(url=url)
 
 
-@router.post("/webhook")
+@router.post("/subscription-sheet", response_model=SubscriptionSheetOut)
+async def subscription_sheet(
+    payload: SubscriptionSheetIn,
+    current=Depends(require_role("nutritionist")),
+    service: StripeSubscriptionsService = Depends(get_subscriptions_service),
+):
+    """Native-card-sheet counterpart to `POST /billing/checkout`. Creates
+    the Stripe Subscription `incomplete` and returns the first invoice's
+    PaymentIntent client secret for the SDK to confirm."""
+    _require_native()
+    try:
+        return await service.start_subscription_sheet(
+            _owner_id(current), current.get("email"), payload.plan_id
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/subscription/verify", response_model=SubscriptionVerifyOut)
+async def verify_subscription(
+    payload: SubscriptionVerifyIn,
+    current=Depends(require_role("nutritionist")),
+    service: StripeSubscriptionsService = Depends(get_subscriptions_service),
+):
+    _require_native()
+    try:
+        return await service.verify_subscription(_owner_id(current), payload.subscription_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/webhook", deprecated=True)
 async def stripe_webhook(
     request: Request,
     service: BillingService = Depends(get_billing_service),
 ):
+    # Superseded by `POST /stripe/webhook` (the shared idempotent dispatcher,
+    # spec 077). Left only for the legacy `BILLING_PROVIDER=stripe` redirect
+    # provider that predates the native rails; 404 otherwise.
     if settings.BILLING_PROVIDER != "stripe":
         raise HTTPException(status_code=404, detail="Not found")
     payload = await request.body()

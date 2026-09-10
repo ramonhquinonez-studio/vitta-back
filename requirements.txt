@@ -17,4 +17,4 @@ google-auth-oauthlib
 requests
 firebase-admin
 python-multipart
-stripe
+stripe==15.5.1

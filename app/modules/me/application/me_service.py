@@ -22,8 +22,21 @@ def parse_range(value: str | None) -> timedelta:
 
 
 class MeService:
-    def __init__(self, repository: MeRepository):
+    def __init__(self, repository: MeRepository, booking_policy_service=None):
         self._repository = repository
+        # Optional so existing MeService(repo) call sites / tests keep working
+        # (same pattern as the optional repos wired in spec 076).
+        self._booking_policy_service = booking_policy_service
+
+    async def _resolve_booking_policy(self, owner_id: str | None) -> dict | None:
+        if not owner_id or self._booking_policy_service is None:
+            return None
+        profile = await self._repository.get_nutritionist_profile(owner_id)
+        price = (profile or {}).get("session_price")
+        currency = (profile or {}).get("session_price_currency") or "MXN"
+        return await self._booking_policy_service.resolve_for_owner(
+            owner_id, session_price=price, currency=currency
+        )
 
     async def get_profile(self, user_id: str) -> dict[str, Any]:
         user = await self._repository.get_user(user_id)
@@ -112,6 +125,21 @@ class MeService:
         mode = payload.get("mode") or "online"
         note = payload.get("note")
 
+        # Booking-protection policy (spec 080). When the nutritionist's policy
+        # requires a deposit/prepay or manual approval, the patient must have
+        # accepted it; we snapshot the resolved terms onto the appointment as
+        # an immutable consent record.
+        policy_snapshot = None
+        policy_accepted_at = None
+        resolved_policy = await self._resolve_booking_policy(owner_id)
+        if resolved_policy and resolved_policy.get("needs_consent"):
+            if payload.get("policy_accepted") is not True:
+                raise ValueError(
+                    "Debes aceptar la política de reserva del nutriólogo para agendar."
+                )
+            policy_snapshot = resolved_policy
+            policy_accepted_at = datetime.now(UTC)
+
         overlap = await self._repository.find_owner_overlap(
             owner_id,
             start=start,
@@ -135,6 +163,8 @@ class MeService:
             end=end,
             mode=mode,
             note=note,
+            policy_snapshot=policy_snapshot,
+            policy_accepted_at=policy_accepted_at,
         )
 
     async def get_appointment_detail(self, user_id: str, appointment_id: str) -> dict:
@@ -224,6 +254,10 @@ class MeService:
 
     async def add_measurement(self, user_id: str, payload: dict[str, Any]) -> dict:
         patient = await self._require_patient(user_id)
+        if patient.get("progress_log_enabled", True) is False:
+            raise PermissionError(
+                "Tu nutriólogo desactivó el registro de progreso."
+            )
         return await self._repository.create_measurement(
             owner_id=patient.get("owner_id"),
             patient_id=patient["id"],
@@ -280,7 +314,19 @@ class MeService:
         patient = await self._repository.get_patient_for_user(user_id)
         if not patient:
             return None
-        return await self._repository.get_nutritionist_profile(patient.get("owner_id"))
+        owner_id = patient.get("owner_id")
+        profile = await self._repository.get_nutritionist_profile(owner_id)
+        if profile is not None:
+            resolved = await self._resolve_booking_policy(owner_id)
+            if resolved is not None:
+                profile = {**profile, "booking_policy": resolved}
+        return profile
+
+    async def get_booking_policy(self, user_id: str) -> dict | None:
+        patient = await self._repository.get_patient_for_user(user_id)
+        if not patient:
+            return None
+        return await self._resolve_booking_policy(patient.get("owner_id"))
 
     async def get_clinical_history(self, user_id: str) -> dict[str, Any]:
         patient = await self._repository.get_patient_for_user(user_id)

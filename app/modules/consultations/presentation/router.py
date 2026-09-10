@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.deps import get_current_user, require_role
@@ -21,6 +21,9 @@ from app.schemas.consultation import (
 from app.modules.appointments.infrastructure.mongo_appointments_repository import (
     MongoAppointmentsRepository,
 )
+from app.modules.patients.infrastructure.mongo_patients_repository import (
+    MongoPatientsRepository,
+)
 
 from ..application.consultations_service import ConsultationsService
 from ..domain.entities import Consultation
@@ -39,6 +42,7 @@ def get_consultations_service(
     return ConsultationsService(
         MongoConsultationsRepository(db),
         appointments_repository=MongoAppointmentsRepository(db),
+        patients_repository=MongoPatientsRepository(db),
     )
 
 
@@ -49,7 +53,9 @@ def _owner_id(current) -> str:
     return owner_id
 
 
-def _serialize(consultation: Consultation) -> ConsultationOut:
+def _serialize(
+    consultation: Consultation, patient_name: str | None = None
+) -> ConsultationOut:
     evaluation_out = None
     if consultation.evaluation is not None:
         evaluation_out = EvaluationSnapshotOut(
@@ -94,10 +100,12 @@ def _serialize(consultation: Consultation) -> ConsultationOut:
         distribution=distribution_out,
         menu_allocations=menu_allocations_out,
         private_notes=consultation.private_notes,
+        plan_id=consultation.plan_id,
         next_appointment_id=consultation.next_appointment_id,
         completed_at=consultation.completed_at,
         created_at=consultation.created_at,
         updated_at=consultation.updated_at,
+        patient_name=patient_name,
     )
 
 
@@ -115,6 +123,19 @@ async def start_consultation(
     return _serialize(consultation)
 
 
+@router.get("", response_model=list[ConsultationOut])
+async def list_consultations(
+    status: str | None = Query(None),
+    patient_id: str | None = Query(None, alias="patientId"),
+    current=Depends(get_current_user),
+    service: ConsultationsService = Depends(get_consultations_service),
+):
+    pairs = await service.list_consultations(
+        _owner_id(current), status=status, patient_id=patient_id
+    )
+    return [_serialize(consultation, name) for consultation, name in pairs]
+
+
 @router.get("/{consultation_id}", response_model=ConsultationOut)
 async def get_consultation(
     consultation_id: str,
@@ -128,6 +149,21 @@ async def get_consultation(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _serialize(consultation)
+
+
+@router.delete("/{consultation_id}", status_code=204)
+async def delete_consultation(
+    consultation_id: str,
+    current=Depends(get_current_user),
+    service: ConsultationsService = Depends(get_consultations_service),
+):
+    try:
+        await service.delete(_owner_id(current), consultation_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(status_code=204)
 
 
 @router.patch("/{consultation_id}", response_model=ConsultationOut)
@@ -254,6 +290,7 @@ async def update_close(
             _owner_id(current),
             consultation_id,
             private_notes=payload.private_notes,
+            plan_id=payload.plan_id,
             next_appointment_id=payload.next_appointment_id,
         )
     except LookupError as exc:
