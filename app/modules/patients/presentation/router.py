@@ -62,6 +62,7 @@ def _serialize(patient: Patient) -> PatientOut:
         archived_at=patient.archived_at,
         tags=patient.tags,
         progress_log_enabled=patient.progress_log_enabled,
+        circumference_goals=patient.circumference_goals,
     )
 
 

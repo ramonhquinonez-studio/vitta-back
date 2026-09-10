@@ -1,7 +1,26 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, List
+
+from app.schemas.body_measurements import CIRCUMFERENCE_SITES
+
+
+def _clean_circumference_goals(value: Optional[dict]) -> Optional[dict]:
+    """Validate a `{site: cm}` goal map against the shared site vocabulary."""
+    if value is None:
+        return None
+    cleaned: dict[str, float] = {}
+    for site, cm in value.items():
+        if site not in CIRCUMFERENCE_SITES:
+            raise ValueError(f"unknown circumference site: {site}")
+        if cm is None:
+            continue
+        if not (0 < float(cm) <= 300):
+            raise ValueError(f"{site} goal must be between 0 and 300 cm")
+        cleaned[site] = round(float(cm), 1)
+    return cleaned
+
 
 class PatientIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=80)
@@ -30,6 +49,15 @@ class PatientUpdate(BaseModel):
     tags: Optional[List[str]] = None
     # Nutritionist-only — stripped from the patient's own PATCH /me/profile (spec 083).
     progress_log_enabled: Optional[bool] = None
+    # Nutritionist-only (spec 085) — per-site circumference targets (cm). An empty
+    # dict clears every goal; omitting the key leaves them untouched. Also
+    # stripped from PATCH /me/profile.
+    circumference_goals: Optional[dict[str, float]] = None
+
+    @field_validator("circumference_goals")
+    @classmethod
+    def _clean_goals(cls, value):
+        return _clean_circumference_goals(value)
 
 class PatientOut(BaseModel):
     id: str
@@ -51,6 +79,7 @@ class PatientOut(BaseModel):
     archived_at: Optional[datetime] = None
     tags: List[str] = []
     progress_log_enabled: bool = True
+    circumference_goals: dict[str, float] = {}
 
 class ClaimPatientIn(BaseModel):
     code: str = Field(..., min_length=4, max_length=40)

@@ -548,6 +548,10 @@ class MongoPatientsRepository:
             phone=document.get("phone"),
             archived_at=document.get("archived_at"),
             progress_log_enabled=document.get("progress_log_enabled", True),
+            circumference_goals={
+                k: float(v)
+                for k, v in (document.get("circumference_goals") or {}).items()
+            },
         )
 
     def _as_oid(self, id_str: str, field_name: str = "id") -> ObjectId:

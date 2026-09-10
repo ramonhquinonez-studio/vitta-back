@@ -81,6 +81,9 @@ class _FakePatientsRepository:
             progress_log_enabled=payload.get(
                 "progress_log_enabled", current.progress_log_enabled
             ),
+            circumference_goals=payload.get(
+                "circumference_goals", current.circumference_goals
+            ),
         )
         self.patients[patient_id] = updated
         return updated
@@ -269,6 +272,22 @@ class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertFalse(updated.progress_log_enabled)
+
+    async def test_update_patient_sets_and_clears_circumference_goals(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+        self.assertEqual(patient.circumference_goals, {})
+
+        updated = await service.update_patient(
+            "owner-1", patient.id, {"circumference_goals": {"waist": 78.0}}
+        )
+        self.assertEqual(updated.circumference_goals, {"waist": 78.0})
+
+        cleared = await service.update_patient(
+            "owner-1", patient.id, {"circumference_goals": {}}
+        )
+        self.assertEqual(cleared.circumference_goals, {})
 
     async def test_list_body_compositions_returns_the_patients_scans(self):
         repository = _FakePatientsRepository()

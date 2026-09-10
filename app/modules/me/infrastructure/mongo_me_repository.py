@@ -44,6 +44,8 @@ class MongoMeRepository:
             "daily_fat_g_goal": patient.get("daily_fat_g_goal"),
             # Missing == enabled (spec 083). Nutritionist-controlled.
             "progress_log_enabled": patient.get("progress_log_enabled", True),
+            # Per-site circumference targets (cm) the nutritionist set (spec 085).
+            "circumference_goals": patient.get("circumference_goals") or {},
         }
 
     async def update_patient_profile(self, patient_id: str, payload: dict) -> dict | None:
