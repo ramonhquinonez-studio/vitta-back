@@ -42,6 +42,8 @@ class MongoMeRepository:
             "daily_protein_g_goal": patient.get("daily_protein_g_goal"),
             "daily_carbs_g_goal": patient.get("daily_carbs_g_goal"),
             "daily_fat_g_goal": patient.get("daily_fat_g_goal"),
+            # Missing == enabled (spec 083). Nutritionist-controlled.
+            "progress_log_enabled": patient.get("progress_log_enabled", True),
         }
 
     async def update_patient_profile(self, patient_id: str, payload: dict) -> dict | None:
@@ -142,6 +144,8 @@ class MongoMeRepository:
         end: datetime,
         mode: str,
         note: str | None,
+        policy_snapshot: dict | None = None,
+        policy_accepted_at: datetime | None = None,
     ) -> dict:
         now = datetime.utcnow()
         document = {
@@ -156,6 +160,9 @@ class MongoMeRepository:
             "created_at": now,
             "updated_at": now,
         }
+        if policy_snapshot is not None:
+            document["policy_snapshot"] = policy_snapshot
+            document["policy_accepted_at"] = policy_accepted_at
         result = await self._db.appointments.insert_one(document)
         created = await self._db.appointments.find_one({"_id": result.inserted_id})
         return self._serialize_appointment(created)
@@ -747,6 +754,8 @@ class MongoMeRepository:
             "body_composition_id": str(doc["body_composition_id"])
             if doc.get("body_composition_id")
             else None,
+            "policy_snapshot": doc.get("policy_snapshot"),
+            "policy_accepted_at": doc.get("policy_accepted_at"),
         }
 
     def _serialize_measurement(self, doc: dict) -> dict:

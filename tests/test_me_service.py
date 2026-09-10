@@ -309,6 +309,34 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result["attachment_type"], "image/jpeg")
 
+    async def test_add_measurement_allowed_when_flag_missing(self):
+        repository = _FakeMeRepository()  # patient has no progress_log_enabled key
+        service = MeService(repository)
+
+        await service.add_measurement("user-1", {"weight_kg": 80.0})
+
+        self.assertIsNotNone(repository.created_measurement_payload)
+
+    async def test_add_measurement_rejected_when_progress_log_disabled(self):
+        repository = _FakeMeRepository()
+        repository.patient["progress_log_enabled"] = False
+        service = MeService(repository)
+
+        with self.assertRaises(PermissionError):
+            await service.add_measurement("user-1", {"weight_kg": 80.0})
+        self.assertIsNone(repository.created_measurement_payload)
+
+    async def test_update_profile_cannot_change_progress_log_enabled(self):
+        # The /me router strips it; the service itself is agnostic, but this
+        # guards the contract that a patient can't re-enable via update_profile.
+        repository = _FakeMeRepository()
+        repository.patient["progress_log_enabled"] = False
+        service = MeService(repository)
+
+        await service.update_profile("user-1", {"notes": "hola"})
+
+        self.assertFalse(repository.patient["progress_log_enabled"])
+
     async def test_request_appointment_defaults_end_and_pending(self):
         repository = _FakeMeRepository()
         service = MeService(repository)

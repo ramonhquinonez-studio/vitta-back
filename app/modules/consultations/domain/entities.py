@@ -48,6 +48,7 @@ class Consultation:
     distribution: DistributionInput | None = None
     menu_allocations: list[MenuAllocationItem] | None = None
     private_notes: str | None = None
+    plan_id: str | None = None
     next_appointment_id: str | None = None
     completed_at: datetime | None = None
     created_at: datetime | None = None

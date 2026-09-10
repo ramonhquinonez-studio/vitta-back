@@ -46,6 +46,22 @@ class _FakeConsultationsRepository:
             return consultation
         return None
 
+    async def list_for_owner(self, owner_id, *, status=None, patient_id=None):
+        return [
+            c
+            for c in self.consultations.values()
+            if c.owner_id == owner_id
+            and (status is None or c.status == status)
+            and (patient_id is None or c.patient_id == patient_id)
+        ]
+
+    async def delete_for_owner(self, owner_id, consultation_id):
+        current = await self.get_for_owner(owner_id, consultation_id)
+        if current is None:
+            return False
+        del self.consultations[consultation_id]
+        return True
+
     async def update_for_owner(self, owner_id, consultation_id, updates):
         current = await self.get_for_owner(owner_id, consultation_id)
         if current is None:
@@ -107,6 +123,20 @@ class _FakeAppointmentsRepository:
     async def update_for_owner(self, owner_id, appointment_id, updates):
         self.statuses[appointment_id] = updates["status"]
         return None
+
+
+class _FakePatient:
+    def __init__(self, name):
+        self.name = name
+
+
+class _FakePatientsRepository:
+    def __init__(self, names: dict[str, str] | None = None):
+        self._names = names or {}
+
+    async def get_for_owner(self, owner_id, patient_id):
+        name = self._names.get(patient_id)
+        return _FakePatient(name) if name is not None else None
 
 
 class ConsultationsServiceTest(unittest.IsolatedAsyncioTestCase):
@@ -312,6 +342,70 @@ class ConsultationsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(updated.private_notes, "Sigue con dolor de rodilla")
         self.assertEqual(updated.next_appointment_id, "a-2")
+
+    async def test_update_close_saves_the_assigned_plan_id(self):
+        repository = _FakeConsultationsRepository()
+        service = ConsultationsService(repository)
+        consultation = await service.start("owner-1", patient_id="patient-1", appointment_id=None)
+
+        updated = await service.update_close(
+            "owner-1",
+            consultation.id,
+            private_notes=None,
+            plan_id="plan-7",
+            next_appointment_id=None,
+        )
+
+        self.assertEqual(updated.plan_id, "plan-7")
+
+    async def test_list_consultations_filters_by_status_and_attaches_patient_name(self):
+        repository = _FakeConsultationsRepository()
+        patients = _FakePatientsRepository({"patient-1": "Ana López"})
+        service = ConsultationsService(repository, patients_repository=patients)
+        draft = await service.start("owner-1", patient_id="patient-1", appointment_id=None)
+        # start() resumes the same open draft, so create the second one directly.
+        completed = await repository.create_draft(
+            "owner-1", patient_id="patient-1", appointment_id=None
+        )
+        await service.complete("owner-1", completed.id)
+
+        rows = await service.list_consultations("owner-1", status="draft")
+
+        self.assertEqual([c.id for c, _ in rows], [draft.id])
+        self.assertEqual(rows[0][1], "Ana López")
+
+    async def test_list_consultations_without_a_patients_repo_returns_no_names(self):
+        repository = _FakeConsultationsRepository()
+        service = ConsultationsService(repository)
+        await service.start("owner-1", patient_id="patient-1", appointment_id=None)
+
+        rows = await service.list_consultations("owner-1")
+
+        self.assertEqual(rows[0][1], None)
+
+    async def test_delete_removes_a_draft_consultation(self):
+        repository = _FakeConsultationsRepository()
+        service = ConsultationsService(repository)
+        consultation = await service.start("owner-1", patient_id="patient-1", appointment_id=None)
+
+        await service.delete("owner-1", consultation.id)
+
+        self.assertEqual(repository.consultations, {})
+
+    async def test_delete_rejects_a_completed_consultation(self):
+        repository = _FakeConsultationsRepository()
+        service = ConsultationsService(repository)
+        consultation = await service.start("owner-1", patient_id="patient-1", appointment_id=None)
+        await service.complete("owner-1", consultation.id)
+
+        with self.assertRaises(ValueError):
+            await service.delete("owner-1", consultation.id)
+
+    async def test_delete_raises_when_not_found(self):
+        service = ConsultationsService(_FakeConsultationsRepository())
+
+        with self.assertRaises(LookupError):
+            await service.delete("owner-1", "missing")
 
     async def test_complete_marks_the_consultation_completed(self):
         repository = _FakeConsultationsRepository()

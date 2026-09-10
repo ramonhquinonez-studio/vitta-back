@@ -1,4 +1,5 @@
 from app.core.config import settings
+from app.modules.payments.infrastructure.stripe_client import as_dict
 
 from ..domain.entities import SubscriptionPlan
 
@@ -35,8 +36,13 @@ class StripeBillingProvider:
         return session.url
 
     def parse_webhook_event(self, *, payload: bytes, signature: str | None) -> dict:
-        event = self._stripe.Webhook.construct_event(
-            payload, signature, settings.STRIPE_WEBHOOK_SECRET
+        # `construct_event` returns a `stripe.Event` (a `StripeObject`, which
+        # rejects `.get()` on SDK v15 — see spec 081); normalize to a plain
+        # dict at the boundary before reading nested fields.
+        event = as_dict(
+            self._stripe.Webhook.construct_event(
+                payload, signature, settings.STRIPE_WEBHOOK_SECRET
+            )
         )
         data = event["data"]["object"]
         return {

@@ -78,6 +78,9 @@ class _FakePatientsRepository:
             email=payload.get("email", current.email),
             phone=payload.get("phone", current.phone),
             archived_at=current.archived_at,
+            progress_log_enabled=payload.get(
+                "progress_log_enabled", current.progress_log_enabled
+            ),
         )
         self.patients[patient_id] = updated
         return updated
@@ -246,6 +249,18 @@ class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(updated.daily_kcal_goal, 1800)
         self.assertEqual(updated.daily_protein_g_goal, 120)
         self.assertIsNone(updated.daily_carbs_g_goal)
+
+    async def test_update_patient_toggles_progress_log_enabled(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+        self.assertTrue(patient.progress_log_enabled)  # default
+
+        updated = await service.update_patient(
+            "owner-1", patient.id, {"progress_log_enabled": False}
+        )
+
+        self.assertFalse(updated.progress_log_enabled)
 
     async def test_list_body_compositions_returns_the_patients_scans(self):
         repository = _FakePatientsRepository()
