@@ -2,7 +2,35 @@
 
 **Feature Branch**: `080-back-booking-protection-policy`
 **Created**: 2026-09-09
-**Status**: Phase 1 Done (2026-09-09); Phases 2–5 designed, not built
+**Status**: Phase 1 Done (2026-09-09). **Phase 3 enforcement engine Done
+(2026-09-10)** — cancellation-preview, forfeit/refund on cancel, reschedule
+limits, no-show. Phase 2's money-movement (deposit charge at booking), Phase 4
+(deposit→balance credit) and Phase 5 (analytics/export) still need the
+dedicated Vitta Stripe account + deployed backend.
+
+### Phase 3 as built (2026-09-10)
+
+- **`app/modules/booking_policy/application/enforcement.py`** — pure
+  `evaluate_cancellation(snapshot, *, start, now, by, is_no_show)` →
+  `{outcome: refund|forfeit|no_charge, refund_cents, status, reason}` and
+  `evaluate_reschedule(snapshot, *, start, now, reschedule_count, by)` →
+  `{allowed, reason}`. No I/O, no Stripe.
+- **`MeService`** — `get_cancellation_preview`; `cancel_appointment` now runs
+  the evaluator, records `cancellation_outcome`/`refunded_cents`, and (when an
+  optional `booking_payments_service` + a linked `payment_id` are present)
+  executes the refund; `reschedule_appointment` enforces the limit + notice
+  (422 via `PermissionError`) and bumps `reschedule_count`.
+- **`GET /me/appointments/{id}/cancellation-preview`** (patient).
+- **`AppointmentsService.mark_no_show`** + **`POST /appointments/{id}/no-show`**
+  (owner, only after the start time) — status `no_show`, deposit forfeit.
+- `_serialize_appointment` gains `reschedule_count`, `cancellation_outcome`,
+  `refunded_cents`, `payment_id`, `payment_kind`, `amount_paid_cents`,
+  `hold_expires_at` (the last three are Phase-2 fields, plumbed now).
+- Clients: `nutri_app` shows the preview reason in the cancel dialog +
+  a red "perder el pago" button on a forfeit; `nutri_pro` gets a
+  "Marcar 'no asistió'" action on past appointments.
+- Tests: `tests/test_booking_enforcement.py` (10), plus me-service +
+  appointments-service cases.
 **Type**: Feature (large, multi-phase, cross-repo)
 
 ## Objective

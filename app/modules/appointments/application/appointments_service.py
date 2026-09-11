@@ -167,6 +167,26 @@ class AppointmentsService:
 
         return updated
 
+    async def mark_no_show(self, owner_id: str, appointment_id: str) -> Appointment:
+        """Owner-only, only after the start time (spec 080 Phase 3). The
+        deposit (if any) is forfeit — recorded on the appointment; the money
+        is already with the nutritionist so nothing moves."""
+        current = await self._repository.get_for_owner(owner_id, appointment_id)
+        if current is None:
+            raise LookupError("Appointment not found")
+        if current.start > datetime.utcnow():
+            raise ValueError("No se puede marcar 'no asistió' antes de la cita.")
+        if current.status in ("canceled", "no_show"):
+            return current
+        updated = await self._repository.update_for_owner(
+            owner_id,
+            appointment_id,
+            {"status": "no_show", "cancellation_outcome": "forfeit"},
+        )
+        if updated is None:
+            raise LookupError("Appointment not found")
+        return updated
+
     async def delete_appointment(self, owner_id: str, appointment_id: str) -> None:
         current = await self._repository.get_for_owner(owner_id, appointment_id)
         if current is None:

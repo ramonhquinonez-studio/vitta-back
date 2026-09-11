@@ -3,6 +3,12 @@ from typing import Any
 
 from ..domain.repositories import MeRepository
 from .availability import AvailabilityConfig, generate_days
+from app.modules.booking_policy.application.enforcement import (
+    BY_PATIENT,
+    REFUND,
+    evaluate_cancellation,
+    evaluate_reschedule,
+)
 
 
 def _booking_timezone() -> str:
@@ -32,11 +38,20 @@ def parse_range(value: str | None) -> timedelta:
 
 
 class MeService:
-    def __init__(self, repository: MeRepository, booking_policy_service=None):
+    def __init__(
+        self,
+        repository: MeRepository,
+        booking_policy_service=None,
+        booking_payments_service=None,
+    ):
         self._repository = repository
         # Optional so existing MeService(repo) call sites / tests keep working
         # (same pattern as the optional repos wired in spec 076).
         self._booking_policy_service = booking_policy_service
+        # Executes the deposit refund on a within-policy cancellation
+        # (spec 080 Phase 3). Optional — when absent the outcome is still
+        # recorded on the appointment, the money just isn't moved yet.
+        self._booking_payments_service = booking_payments_service
 
     async def _resolve_booking_policy(self, owner_id: str | None) -> dict | None:
         if not owner_id or self._booking_policy_service is None:
@@ -224,18 +239,57 @@ class MeService:
             raise LookupError("Appointment not found")
         return appointment
 
+    def _cancellation_outcome(self, appointment: dict, *, by: str) -> dict:
+        start = appointment.get("start")
+        return evaluate_cancellation(
+            appointment.get("policy_snapshot"),
+            start=start if isinstance(start, datetime) else datetime.now(UTC),
+            now=datetime.now(UTC),
+            by=by,
+        )
+
+    async def get_cancellation_preview(self, user_id: str, appointment_id: str) -> dict:
+        """What cancelling now would cost the patient (spec 080 Phase 3) —
+        `{outcome, refund_cents, reason}`."""
+        patient = await self._require_patient(user_id)
+        appointment = await self._repository.get_patient_appointment(
+            patient["id"], appointment_id
+        )
+        if appointment is None:
+            raise LookupError("Appointment not found")
+        outcome = self._cancellation_outcome(appointment, by=BY_PATIENT)
+        return {
+            "outcome": outcome["outcome"],
+            "refund_cents": outcome["refund_cents"],
+            "reason": outcome["reason"],
+        }
+
     async def cancel_appointment(self, user_id: str, appointment_id: str) -> dict:
         patient = await self._require_patient(user_id)
         appointment = await self._repository.get_patient_appointment(patient["id"], appointment_id)
         if appointment is None:
             raise LookupError("Appointment not found")
-        if appointment.get("status") == "canceled":
+        if appointment.get("status") in ("canceled", "no_show"):
             return appointment
+
+        outcome = self._cancellation_outcome(appointment, by=BY_PATIENT)
+        refunded_cents = 0
+        if (
+            outcome["outcome"] == REFUND
+            and outcome["refund_cents"] > 0
+            and self._booking_payments_service is not None
+            and appointment.get("payment_id")
+        ):
+            await self._booking_payments_service.refund(appointment["payment_id"])
+            refunded_cents = outcome["refund_cents"]
+
         updated = await self._repository.update_patient_appointment(
             patient["id"],
             appointment_id,
             {
-                "status": "canceled",
+                "status": outcome["status"],
+                "cancellation_outcome": outcome["outcome"],
+                "refunded_cents": refunded_cents,
                 "updated_at": datetime.now(UTC),
             },
         )
@@ -248,8 +302,19 @@ class MeService:
         appointment = await self._repository.get_patient_appointment(patient["id"], appointment_id)
         if appointment is None:
             raise LookupError("Appointment not found")
-        if appointment.get("status") == "canceled":
+        if appointment.get("status") in ("canceled", "no_show"):
             raise ValueError("Canceled appointments cannot be rescheduled")
+
+        # Policy limits (spec 080 Phase 3) — count + minimum notice.
+        rule = evaluate_reschedule(
+            appointment.get("policy_snapshot"),
+            start=appointment.get("start") or datetime.now(UTC),
+            now=datetime.now(UTC),
+            reschedule_count=int(appointment.get("reschedule_count") or 0),
+            by=BY_PATIENT,
+        )
+        if not rule["allowed"]:
+            raise PermissionError(rule["reason"])
 
         start = self._parse_datetime(payload.get("start"), required=True, field_name="start")
         end = self._parse_datetime(payload.get("end"), required=False, field_name="end")
@@ -289,6 +354,7 @@ class MeService:
                 "end": end,
                 "status": new_status,
                 "note": payload.get("note") or appointment.get("note"),
+                "reschedule_count": int(appointment.get("reschedule_count") or 0) + 1,
                 "updated_at": datetime.now(UTC),
             },
         )
