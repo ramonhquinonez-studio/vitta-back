@@ -26,6 +26,11 @@ class PlanMealItem(BaseModel):
     # never a generic per-unit constant. Null when `unit` is already a
     # weight unit, or when no USDA portion was available/picked.
     unit_gram_weight: Optional[float] = None
+    # Glucose meal-sequencing (spec 088). Pins this item to a course in the
+    # patient app's "Orden sugerido" card instead of letting it auto-classify:
+    # 1 = fibra/verduras (first), 2 = proteína/grasa, 3 = carbohidratos (last).
+    # None = auto from `equivalency_group_id` + macros.
+    eating_order: Optional[int] = Field(default=None, ge=1, le=3)
 
 class EatingOutOption(BaseModel):
     restaurant: str

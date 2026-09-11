@@ -160,3 +160,33 @@ class PlanSchemaTest(unittest.TestCase):
         self.assertEqual(item["equivalency_group_id"], "cereales_sin_grasa")
         self.assertEqual(item["equivalency_food_id"], "food-1")
         self.assertEqual(item["equivalents"], 2)
+
+    def test_plan_create_parses_eating_order_and_rejects_out_of_range(self):
+        payload = PlanCreate(
+            name="Plan",
+            duration_days=7,
+            meals=[
+                {
+                    "title": "Comida",
+                    "items": [
+                        {"name": "Ensalada", "qty": 1, "unit": "plato",
+                         "eating_order": 1},
+                        {"name": "Arroz", "qty": 1, "unit": "taza"},
+                    ],
+                },
+            ],
+        )
+        dumped = payload.model_dump()
+        self.assertEqual(dumped["meals"][0]["items"][0]["eating_order"], 1)
+        self.assertIsNone(dumped["meals"][0]["items"][1]["eating_order"])
+
+        with self.assertRaises(Exception):
+            PlanCreate(
+                name="Plan",
+                duration_days=7,
+                meals=[
+                    {"title": "X", "items": [
+                        {"name": "Y", "qty": 1, "unit": "u", "eating_order": 4}
+                    ]},
+                ],
+            )
