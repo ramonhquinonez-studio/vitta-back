@@ -2,10 +2,14 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-# Fixed circumference-site vocabulary (spec 084). One value (cm) per site —
-# left/right are averaged by the client for Phase 1.
+# Fixed circumference-site vocabulary (spec 084). The paired limbs (arm/thigh/
+# calf) also accept `<site>_left` / `<site>_right` keys (spec 087) — the bare
+# key stays valid and means "single value / side unspecified".
+_BASE_SITES = ("neck", "chest", "arm", "waist", "hip", "thigh", "calf")
+_PAIRED_SITES = ("arm", "thigh", "calf")
 CIRCUMFERENCE_SITES: frozenset[str] = frozenset(
-    {"neck", "chest", "arm", "waist", "hip", "thigh", "calf"}
+    _BASE_SITES
+    + tuple(f"{s}_{side}" for s in _PAIRED_SITES for side in ("left", "right"))
 )
 
 
