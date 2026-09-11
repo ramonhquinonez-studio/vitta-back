@@ -217,6 +217,22 @@ async def update_appointment(
     return _serialize(appointment)
 
 
+@router.post("/{appointment_id}/no-show", response_model=AppointmentOut)
+async def mark_appointment_no_show(
+    appointment_id: str,
+    current=Depends(get_current_user),
+    service: AppointmentsService = Depends(get_appointments_service),
+):
+    """Owner marks a past appointment as a no-show (spec 080 Phase 3)."""
+    try:
+        appointment = await service.mark_no_show(_owner_id(current), appointment_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _serialize(appointment)
+
+
 @router.delete("/{appointment_id}", status_code=204)
 async def delete_appointment(
     appointment_id: str,

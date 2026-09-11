@@ -788,6 +788,14 @@ class MongoMeRepository:
             else None,
             "policy_snapshot": doc.get("policy_snapshot"),
             "policy_accepted_at": doc.get("policy_accepted_at"),
+            # Booking-protection Phases 2–3 (spec 080).
+            "reschedule_count": int(doc.get("reschedule_count") or 0),
+            "cancellation_outcome": doc.get("cancellation_outcome"),
+            "refunded_cents": doc.get("refunded_cents"),
+            "payment_id": str(doc["payment_id"]) if doc.get("payment_id") else None,
+            "payment_kind": doc.get("payment_kind"),
+            "amount_paid_cents": doc.get("amount_paid_cents"),
+            "hold_expires_at": doc.get("hold_expires_at"),
         }
 
     def _serialize_measurement(self, doc: dict) -> dict:

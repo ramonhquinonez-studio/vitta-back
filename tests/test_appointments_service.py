@@ -279,6 +279,42 @@ class AppointmentsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn(appointment.id, repository.appointments)
 
+    async def test_mark_no_show_requires_the_appointment_to_be_in_the_past(self):
+        repository = _FakeAppointmentsRepository()
+        service = AppointmentsService(repository, _FakeCalendarGateway())
+        future = await repository.create_for_owner(
+            "owner-1",
+            patient_id="patient-1",
+            start=datetime.utcnow() + timedelta(hours=2),
+            end=datetime.utcnow() + timedelta(hours=3),
+            mode="online",
+            status="confirmed",
+            note=None,
+            plan_id=None,
+            body_composition_id=None,
+            no_sync=True,
+        )
+        with self.assertRaises(ValueError):
+            await service.mark_no_show("owner-1", future.id)
+
+    async def test_mark_no_show_sets_the_status_after_the_start(self):
+        repository = _FakeAppointmentsRepository()
+        service = AppointmentsService(repository, _FakeCalendarGateway())
+        past = await repository.create_for_owner(
+            "owner-1",
+            patient_id="patient-1",
+            start=datetime.utcnow() - timedelta(hours=2),
+            end=datetime.utcnow() - timedelta(hours=1),
+            mode="online",
+            status="confirmed",
+            note=None,
+            plan_id=None,
+            body_composition_id=None,
+            no_sync=True,
+        )
+        updated = await service.mark_no_show("owner-1", past.id)
+        self.assertEqual(updated.status, "no_show")
+
     async def test_list_appointments_filters_by_patient_id(self):
         repository = _FakeAppointmentsRepository()
         calendar = _FakeCalendarGateway()

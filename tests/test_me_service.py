@@ -68,11 +68,15 @@ class _FakeMeRepository:
             "owner_id": kwargs["owner_id"],
         }
 
+    appointment_for_detail = None
+    last_appointment_updates = None
+
     async def get_patient_appointment(self, patient_id, appointment_id):
-        return None
+        return self.appointment_for_detail
 
     async def update_patient_appointment(self, patient_id, appointment_id, updates):
-        return None
+        self.last_appointment_updates = updates
+        return {**(self.appointment_for_detail or {}), **updates}
 
     async def list_measurements(self, patient_id, *, limit):
         return []
@@ -384,6 +388,100 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["status"], "pending")
         self.assertEqual(repository.created_payload["end"], start + timedelta(minutes=45))
+
+    async def test_cancellation_preview_forfeits_inside_the_cutoff(self):
+        repository = _FakeMeRepository()
+        repository.appointment_for_detail = {
+            "id": "a1",
+            "start": datetime.now(UTC) + timedelta(hours=3),
+            "status": "confirmed",
+            "policy_snapshot": {
+                "payment_mode": "deposit",
+                "amount_due_cents": 24000,
+                "amount_paid_cents": 24000,
+                "cancellation_cutoff_hours": 24,
+            },
+        }
+        service = MeService(repository)
+
+        preview = await service.get_cancellation_preview("user-1", "a1")
+        self.assertEqual(preview["outcome"], "forfeit")
+        self.assertEqual(preview["refund_cents"], 0)
+
+    async def test_cancel_refunds_a_deposit_when_within_policy(self):
+        class _FakeBookingPayments:
+            def __init__(self):
+                self.refunded = None
+
+            async def refund(self, payment_id):
+                self.refunded = payment_id
+
+        repository = _FakeMeRepository()
+        repository.appointment_for_detail = {
+            "id": "a1",
+            "start": datetime.now(UTC) + timedelta(hours=72),
+            "status": "confirmed",
+            "payment_id": "pay_1",
+            "policy_snapshot": {
+                "payment_mode": "deposit",
+                "amount_due_cents": 24000,
+                "amount_paid_cents": 24000,
+                "cancellation_cutoff_hours": 24,
+            },
+        }
+        payments = _FakeBookingPayments()
+        service = MeService(repository, booking_payments_service=payments)
+
+        result = await service.cancel_appointment("user-1", "a1")
+        self.assertEqual(payments.refunded, "pay_1")
+        self.assertEqual(result["status"], "canceled")
+        self.assertEqual(result["cancellation_outcome"], "refund")
+        self.assertEqual(result["refunded_cents"], 24000)
+
+    async def test_reschedule_blocked_once_the_limit_is_reached(self):
+        repository = _FakeMeRepository()
+        repository.appointment_for_detail = {
+            "id": "a1",
+            "start": datetime.now(UTC) + timedelta(hours=72),
+            "end": datetime.now(UTC) + timedelta(hours=73),
+            "status": "confirmed",
+            "reschedule_count": 1,
+            "policy_snapshot": {
+                "reschedule_limit": 1,
+                "reschedule_notice_hours": 24,
+            },
+        }
+        service = MeService(repository)
+
+        with self.assertRaises(PermissionError):
+            await service.reschedule_appointment(
+                "user-1",
+                "a1",
+                {"start": (datetime.now(UTC) + timedelta(days=5)).isoformat()},
+            )
+
+    async def test_reschedule_bumps_the_count_when_allowed(self):
+        repository = _FakeMeRepository()
+        repository.appointment_for_detail = {
+            "id": "a1",
+            "start": datetime.now(UTC) + timedelta(hours=72),
+            "end": datetime.now(UTC) + timedelta(hours=73),
+            "status": "confirmed",
+            "reschedule_count": 0,
+            "owner_id": "owner-1",
+            "policy_snapshot": {
+                "reschedule_limit": 2,
+                "reschedule_notice_hours": 24,
+            },
+        }
+        service = MeService(repository)
+
+        await service.reschedule_appointment(
+            "user-1",
+            "a1",
+            {"start": (datetime.now(UTC) + timedelta(days=5)).isoformat()},
+        )
+        self.assertEqual(repository.last_appointment_updates["reschedule_count"], 1)
 
     async def test_get_availability_generates_slots_from_the_configured_window(self):
         repository = _FakeMeRepository()

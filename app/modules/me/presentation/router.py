@@ -163,6 +163,23 @@ async def my_appointment_detail(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get(
+    "/appointments/{appointment_id}/cancellation-preview", response_model=dict
+)
+async def my_cancellation_preview(
+    appointment_id: str,
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    """What cancelling now would cost (spec 080 Phase 3)."""
+    try:
+        return await service.get_cancellation_preview(
+            _user_id(current), appointment_id
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post("/appointments/{appointment_id}/cancel", response_model=dict)
 async def cancel_my_appointment(
     appointment_id: str,
@@ -188,6 +205,8 @@ async def reschedule_my_appointment(
         return await service.reschedule_appointment(_user_id(current), appointment_id, payload)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
         _unwrap_runtime_error(exc)
     except ValueError as exc:
