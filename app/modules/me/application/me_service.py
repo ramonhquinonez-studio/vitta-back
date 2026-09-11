@@ -1,7 +1,17 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from ..domain.repositories import MeRepository
+from .availability import AvailabilityConfig, generate_days
+
+
+def _booking_timezone() -> str:
+    try:
+        from app.core.config import settings
+
+        return settings.BOOKING_TIMEZONE
+    except Exception:  # pragma: no cover - config always importable in practice
+        return "America/Mexico_City"
 
 
 def parse_range(value: str | None) -> timedelta:
@@ -166,6 +176,46 @@ class MeService:
             policy_snapshot=policy_snapshot,
             policy_accepted_at=policy_accepted_at,
         )
+
+    async def get_availability(
+        self, user_id: str, *, from_date: date | None = None, days: int = 21
+    ) -> dict:
+        """Open booking slots for the patient's assigned nutritionist (spec
+        086), from the nutritionist's configured window minus their live
+        appointments."""
+        patient = await self._require_patient(user_id)
+        owner_id = patient.get("owner_id")
+        if not owner_id:
+            raise ValueError("Patient has no owner assigned")
+
+        now_utc = datetime.now(UTC).replace(tzinfo=None)
+        from_date = from_date or now_utc.date()
+        days = max(1, min(int(days), 60))
+
+        profile = await self._repository.get_nutritionist_profile(owner_id)
+        config = AvailabilityConfig.from_profile(profile)
+
+        # Widen the appointment window by a day either side so a local-time slot
+        # near midnight still sees an appointment stored in UTC.
+        window_start = datetime.combine(from_date, datetime.min.time()) - timedelta(days=1)
+        window_end = window_start + timedelta(days=days + 2)
+        busy = await self._repository.list_owner_appointments_between(
+            owner_id, start=window_start, end=window_end
+        )
+
+        day_slots = generate_days(
+            config,
+            from_date=from_date,
+            day_count=days,
+            busy=busy,
+            now_utc=now_utc,
+            tz_name=_booking_timezone(),
+        )
+        return {
+            "slot_minutes": config.slot_minutes,
+            "modality": config.modality,
+            "days": day_slots,
+        }
 
     async def get_appointment_detail(self, user_id: str, appointment_id: str) -> dict:
         patient = await self._require_patient(user_id)

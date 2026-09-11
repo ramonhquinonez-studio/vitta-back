@@ -38,5 +38,12 @@ class NutritionistProfile:
     macro_split: MacroSplit | None = None
     units: str | None = None
     meals_per_day: int | None = None
+    # Booking availability (spec 086) — the patient-booking slot generator reads
+    # these; sensible defaults so an un-configured nutritionist still bookable.
+    booking_modality: str = "both"  # online | onsite | both
+    booking_weekdays: list[int] = field(default_factory=lambda: [1, 2, 3, 4, 5])
+    booking_window_start: str = "09:00"
+    booking_window_end: str = "18:00"
+    booking_slot_minutes: int = 45
     # Onboarding tracking
     onboarding_completed_at: datetime | None = None

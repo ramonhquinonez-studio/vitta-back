@@ -1,6 +1,11 @@
+import re
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Literal, Optional
+
+_HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+BookingModality = Literal["online", "onsite", "both"]
 
 
 class SocialLinkIn(BaseModel):
@@ -35,6 +40,37 @@ class NutritionistProfileUpdate(BaseModel):
     macro_split: Optional[MacroSplitIn] = None
     units: Optional[Literal["metric", "imperial"]] = None
     meals_per_day: Optional[int] = Field(None, ge=1, le=10)
+    # Booking availability (spec 086) — drives `GET /me/availability`.
+    booking_modality: Optional[BookingModality] = None
+    booking_weekdays: Optional[List[int]] = None  # ISO 1..7
+    booking_window_start: Optional[str] = None  # "HH:MM"
+    booking_window_end: Optional[str] = None  # "HH:MM"
+    booking_slot_minutes: Optional[int] = Field(None, ge=15, le=180)
+
+    @field_validator("booking_weekdays")
+    @classmethod
+    def _check_weekdays(cls, value):
+        if value is None:
+            return value
+        cleaned = sorted({int(d) for d in value})
+        if not cleaned or any(d < 1 or d > 7 for d in cleaned):
+            raise ValueError("booking_weekdays must be ISO weekday ints 1..7")
+        return cleaned
+
+    @field_validator("booking_window_start", "booking_window_end")
+    @classmethod
+    def _check_hhmm(cls, value):
+        if value is not None and not _HHMM.match(value):
+            raise ValueError("time must be HH:MM (24h)")
+        return value
+
+    @field_validator("booking_window_end")
+    @classmethod
+    def _check_window_order(cls, value, info):
+        start = info.data.get("booking_window_start")
+        if value is not None and start is not None and value <= start:
+            raise ValueError("booking_window_end must be after booking_window_start")
+        return value
 
 
 class SocialLinkOut(BaseModel):
@@ -66,5 +102,10 @@ class NutritionistProfileOut(BaseModel):
     macro_split: Optional[MacroSplitOut] = None
     units: Optional[str] = None
     meals_per_day: Optional[int] = None
+    booking_modality: BookingModality = "both"
+    booking_weekdays: List[int] = [1, 2, 3, 4, 5]
+    booking_window_start: str = "09:00"
+    booking_window_end: str = "18:00"
+    booking_slot_minutes: int = 45
     onboarding_completed_at: Optional[datetime] = None
     patient_count: int = 0

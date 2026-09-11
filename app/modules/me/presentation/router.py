@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
@@ -92,6 +92,24 @@ async def my_appointments(
 ):
     try:
         return await service.list_appointments(_user_id(current), from_dt=from_, to_dt=to)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/availability", response_model=dict)
+async def my_availability(
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+    from_: date | None = Query(None, alias="from"),
+    days: int = Query(21, ge=1, le=60),
+):
+    """Open booking slots for the patient's nutritionist (spec 086)."""
+    try:
+        return await service.get_availability(
+            _user_id(current), from_date=from_, days=days
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

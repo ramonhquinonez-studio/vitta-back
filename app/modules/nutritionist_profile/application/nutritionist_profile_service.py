@@ -34,6 +34,11 @@ def _serialize(profile: NutritionistProfile, patient_count: int) -> dict[str, An
         ),
         "units": profile.units,
         "meals_per_day": profile.meals_per_day,
+        "booking_modality": profile.booking_modality,
+        "booking_weekdays": profile.booking_weekdays,
+        "booking_window_start": profile.booking_window_start,
+        "booking_window_end": profile.booking_window_end,
+        "booking_slot_minutes": profile.booking_slot_minutes,
         "onboarding_completed_at": profile.onboarding_completed_at,
         "patient_count": patient_count,
     }

@@ -34,6 +34,11 @@ class MeRepository(Protocol):
     ) -> dict | None:
         ...
 
+    async def list_owner_appointments_between(
+        self, owner_id: str, *, start: datetime, end: datetime
+    ) -> list[dict]:
+        ...
+
     async def create_patient_appointment(
         self,
         *,
