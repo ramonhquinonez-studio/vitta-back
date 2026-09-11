@@ -51,6 +51,11 @@ class _FakeMeRepository:
     async def find_owner_overlap(self, owner_id, *, start, end, exclude_appointment_id=None):
         return None
 
+    owner_appointments_between = []
+
+    async def list_owner_appointments_between(self, owner_id, *, start, end):
+        return self.owner_appointments_between
+
     async def create_patient_appointment(self, **kwargs):
         self.created_payload = kwargs
         return {
@@ -104,6 +109,8 @@ class _FakeMeRepository:
             return platform
         return platform + [{"id": "mine-1", "title": "Mi consejo", "owner_id": owner_id}]
 
+    nutritionist_profile_extra = {}
+
     async def get_nutritionist_profile(self, owner_id):
         if not owner_id:
             return None
@@ -116,6 +123,7 @@ class _FakeMeRepository:
             "session_price_currency": "MXN",
             "social_links": [{"platform": "instagram", "handle": "@dra.ruiz"}],
             "patient_count": 42,
+            **self.nutritionist_profile_extra,
         }
 
     async def list_food_diary_entries(self, patient_id, *, limit):
@@ -376,6 +384,76 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["status"], "pending")
         self.assertEqual(repository.created_payload["end"], start + timedelta(minutes=45))
+
+    async def test_get_availability_generates_slots_from_the_configured_window(self):
+        repository = _FakeMeRepository()
+        repository.nutritionist_profile_extra = {
+            "booking_weekdays": [1, 2, 3, 4, 5],
+            "booking_window_start": "09:00",
+            "booking_window_end": "12:00",
+            "booking_slot_minutes": 60,
+            "booking_modality": "online",
+        }
+        service = MeService(repository)
+
+        # A Monday well in the future so no "past slot" filtering kicks in.
+        result = await service.get_availability(
+            "user-1", from_date=datetime(2099, 1, 5).date(), days=1
+        )
+
+        self.assertEqual(result["slot_minutes"], 60)
+        self.assertEqual(result["modality"], "online")
+        self.assertEqual(len(result["days"]), 1)
+        # 09:00/10:00/11:00 America/Mexico_City (UTC-6, no DST) → naive-UTC.
+        self.assertEqual(
+            result["days"][0]["slots"],
+            ["2099-01-05T15:00", "2099-01-05T16:00", "2099-01-05T17:00"],
+        )
+
+    async def test_get_availability_drops_slots_clashing_with_appointments(self):
+        repository = _FakeMeRepository()
+        repository.nutritionist_profile_extra = {
+            "booking_window_start": "09:00",
+            "booking_window_end": "12:00",
+            "booking_slot_minutes": 60,
+        }
+        repository.owner_appointments_between = [
+            {
+                # 10:00-10:45 local == 16:00-16:45 UTC
+                "start": datetime(2099, 1, 5, 16, 0),
+                "end": datetime(2099, 1, 5, 16, 45),
+            }
+        ]
+        service = MeService(repository)
+
+        result = await service.get_availability(
+            "user-1", from_date=datetime(2099, 1, 5).date(), days=1
+        )
+
+        self.assertEqual(
+            result["days"][0]["slots"],
+            ["2099-01-05T15:00", "2099-01-05T17:00"],
+        )
+
+    async def test_get_availability_skips_non_configured_weekdays(self):
+        repository = _FakeMeRepository()
+        repository.nutritionist_profile_extra = {"booking_weekdays": [1]}
+        service = MeService(repository)
+
+        # 2099-01-05 is a Monday; ask for the whole week.
+        result = await service.get_availability(
+            "user-1", from_date=datetime(2099, 1, 5).date(), days=7
+        )
+
+        self.assertEqual([d["date"] for d in result["days"]], ["2099-01-05"])
+
+    async def test_get_availability_requires_an_assigned_nutritionist(self):
+        repository = _FakeMeRepository()
+        repository.patient = {"id": "patient-1", "name": "Sin nutriólogo"}
+        service = MeService(repository)
+
+        with self.assertRaises(ValueError):
+            await service.get_availability("user-1")
 
     async def test_update_profile_applies_patch_to_linked_patient(self):
         repository = _FakeMeRepository()

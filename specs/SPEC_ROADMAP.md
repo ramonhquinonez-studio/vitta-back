@@ -88,6 +88,7 @@
 - `084-back-body-measurements`  *(`measurements.circumferences` map; `POST /me/body-measurements` + `POST /patients/{id}/measurements`; backs the body figure — `nutri_app` `072` / `nutri_pro` `113`.)*
 - *(fix)* `StripeBillingProvider.parse_webhook_event` — the deprecated `/billing/webhook` path (`BILLING_PROVIDER=stripe` only) still read `.get()` on a raw `stripe.Event`; now `as_dict()`-normalized like the rest of `081`.
 - `085-back-circumference-goals`  *(`patients.circumference_goals` map — nutritionist-set target cm per site, same vocabulary as `084`; `PATCH /patients/{id}`, exposed on `GET /patients/{id}` + `GET /me/profile`, stripped from `PATCH /me/profile`. Body-figure Phase 3 — `nutri_app` `074` / `nutri_pro` `114`.)*
+- `086-back-booking-availability`  *(`NutritionistProfile` gains `booking_modality`/`booking_weekdays`/`booking_window_start`/`booking_window_end`/`booking_slot_minutes` (validated, defaulted); new `GET /me/availability?from&days` returns real open slots — the window minus `pending`/`confirmed` appointments, generated in `Settings.BOOKING_TIMEZONE` and returned as naive-UTC. Replaces `nutri_app`'s fabricated static slot grid — `nutri_app` `075`. `nutri_pro` config UI deferred.)*
 
 - `113-front-body-figure-measurements` *(interactive body figure on patient detail — read + record tape-measure circumferences; backend `084`, patient side `nutri_app` `072`)*
 

@@ -71,6 +71,13 @@ class MongoNutritionistProfileRepository:
             macro_split=macro_split,
             units=document.get("units"),
             meals_per_day=document.get("meals_per_day"),
+            booking_modality=document.get("booking_modality") or "both",
+            booking_weekdays=list(
+                document.get("booking_weekdays") or [1, 2, 3, 4, 5]
+            ),
+            booking_window_start=document.get("booking_window_start") or "09:00",
+            booking_window_end=document.get("booking_window_end") or "18:00",
+            booking_slot_minutes=document.get("booking_slot_minutes") or 45,
             onboarding_completed_at=document.get("onboarding_completed_at"),
         )
 

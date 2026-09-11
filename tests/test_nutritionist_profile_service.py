@@ -55,6 +55,21 @@ class _FakeNutritionistProfileRepository:
             macro_split=macro_split,
             units=payload.get("units", current.units),
             meals_per_day=payload.get("meals_per_day", current.meals_per_day),
+            booking_modality=payload.get(
+                "booking_modality", current.booking_modality
+            ),
+            booking_weekdays=payload.get(
+                "booking_weekdays", current.booking_weekdays
+            ),
+            booking_window_start=payload.get(
+                "booking_window_start", current.booking_window_start
+            ),
+            booking_window_end=payload.get(
+                "booking_window_end", current.booking_window_end
+            ),
+            booking_slot_minutes=payload.get(
+                "booking_slot_minutes", current.booking_slot_minutes
+            ),
             onboarding_completed_at=payload.get(
                 "onboarding_completed_at", current.onboarding_completed_at
             ),
@@ -83,6 +98,31 @@ class NutritionistProfileServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["session_price_currency"], "MXN")
         self.assertEqual(result["social_links"], [])
         self.assertEqual(result["patient_count"], 3)
+        # Booking-availability defaults (spec 086)
+        self.assertEqual(result["booking_modality"], "both")
+        self.assertEqual(result["booking_weekdays"], [1, 2, 3, 4, 5])
+        self.assertEqual(result["booking_window_start"], "09:00")
+        self.assertEqual(result["booking_slot_minutes"], 45)
+
+    async def test_update_my_profile_saves_booking_availability(self):
+        repository = _FakeNutritionistProfileRepository()
+        service = NutritionistProfileService(repository)
+
+        result = await service.update_my_profile(
+            "owner-1",
+            {
+                "booking_modality": "onsite",
+                "booking_weekdays": [2, 4],
+                "booking_window_start": "10:00",
+                "booking_window_end": "15:00",
+                "booking_slot_minutes": 30,
+            },
+        )
+
+        self.assertEqual(result["booking_modality"], "onsite")
+        self.assertEqual(result["booking_weekdays"], [2, 4])
+        self.assertEqual(result["booking_window_start"], "10:00")
+        self.assertEqual(result["booking_slot_minutes"], 30)
 
     async def test_update_my_profile_saves_fields_and_reports_patient_count(self):
         repository = _FakeNutritionistProfileRepository()

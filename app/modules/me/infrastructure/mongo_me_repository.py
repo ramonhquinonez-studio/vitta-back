@@ -351,7 +351,36 @@ class MongoMeRepository:
             "logo_url": profile.get("logo_url"),
             "brand_color": profile.get("brand_color"),
             "patient_count": patient_count,
+            # Booking availability (spec 086) — the patient app limits the
+            # modality picker to what the nutritionist offers.
+            "booking_modality": profile.get("booking_modality") or "both",
+            "booking_weekdays": list(
+                profile.get("booking_weekdays") or [1, 2, 3, 4, 5]
+            ),
+            "booking_window_start": profile.get("booking_window_start") or "09:00",
+            "booking_window_end": profile.get("booking_window_end") or "18:00",
+            "booking_slot_minutes": profile.get("booking_slot_minutes") or 45,
         }
+
+    async def list_owner_appointments_between(
+        self, owner_id: str, *, start: datetime, end: datetime
+    ) -> list[dict]:
+        """`{start, end}` for the nutritionist's live appointments overlapping
+        the window — used by the availability slot generator (spec 086)."""
+        owner_oid = self._as_oid(owner_id)
+        cursor = self._db.appointments.find(
+            {
+                "owner_id": owner_oid,
+                "start": {"$lt": end},
+                "end": {"$gt": start},
+                "status": {"$in": ["pending", "confirmed"]},
+            },
+            {"start": 1, "end": 1},
+        )
+        return [
+            {"start": doc.get("start"), "end": doc.get("end")}
+            async for doc in cursor
+        ]
 
     async def list_clinical_notes(self, patient_id: str) -> list[dict]:
         patient_oid = self._as_oid(patient_id)

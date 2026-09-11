@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     PLATFORM_FEE_BPS: int = 1000
     STRIPE_CONNECT_COUNTRY: str = "MX"
 
+    # Wall-clock timezone the booking-availability slot generator (spec 086)
+    # works in — nutritionist working hours are entered as local time. Single
+    # tenant timezone for now (Vitta is Mexico-first); a per-nutritionist tz is
+    # a later refinement.
+    BOOKING_TIMEZONE: str = "America/Mexico_City"
+
     @property
     def stripe_native_enabled(self) -> bool:
         """True when the native-SDK payment rails (payments/payment_methods/
