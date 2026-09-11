@@ -71,9 +71,10 @@ async def update_my_profile(
         for key, value in payload.model_dump().items()
         if value is not None
     }
-    # Nutritionist-only field — a patient must not re-enable their own
-    # progress logging via /me/profile (spec 083).
+    # Nutritionist-only fields — a patient must not re-enable their own progress
+    # logging (spec 083) or edit their circumference goals (spec 085) here.
     updates.pop("progress_log_enabled", None)
+    updates.pop("circumference_goals", None)
     try:
         return await service.update_profile(_user_id(current), updates)
     except LookupError as exc:

@@ -87,6 +87,7 @@
 - `083-back-patient-progress-log-toggle`  *(patient doc `progress_log_enabled`; nutritionist-only `PATCH /patients/{id}`; `POST /me/measurements` 403 when off; `/me/profile` exposes it; `PATCH /me/profile` strips it. Cross-repo: `nutri_pro` `112`, `nutri_app` `070`.)*
 - `084-back-body-measurements`  *(`measurements.circumferences` map; `POST /me/body-measurements` + `POST /patients/{id}/measurements`; backs the body figure — `nutri_app` `072` / `nutri_pro` `113`.)*
 - *(fix)* `StripeBillingProvider.parse_webhook_event` — the deprecated `/billing/webhook` path (`BILLING_PROVIDER=stripe` only) still read `.get()` on a raw `stripe.Event`; now `as_dict()`-normalized like the rest of `081`.
+- `085-back-circumference-goals`  *(`patients.circumference_goals` map — nutritionist-set target cm per site, same vocabulary as `084`; `PATCH /patients/{id}`, exposed on `GET /patients/{id}` + `GET /me/profile`, stripped from `PATCH /me/profile`. Body-figure Phase 3 — `nutri_app` `074` / `nutri_pro` `114`.)*
 
 - `113-front-body-figure-measurements` *(interactive body figure on patient detail — read + record tape-measure circumferences; backend `084`, patient side `nutri_app` `072`)*
 

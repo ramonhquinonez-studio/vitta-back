@@ -40,3 +40,7 @@ class Patient:
     # in the document == enabled, so existing patients are unaffected. Only the
     # nutritionist changes this (spec 083).
     progress_log_enabled: bool = True
+    # Per-circumference-site target (cm), keyed by the same `CIRCUMFERENCE_SITES`
+    # vocabulary as `measurements.circumferences`. Nutritionist-set (spec 085) —
+    # drives the body figure's goal-proximity colouring in both apps.
+    circumference_goals: dict[str, float] = field(default_factory=dict)
