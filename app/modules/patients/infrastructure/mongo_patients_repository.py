@@ -262,6 +262,20 @@ class MongoPatientsRepository:
             "attachment_type": None,
         }
 
+    async def delete_measurement(
+        self, owner_id: str, patient_id: str, entry_id: str
+    ) -> bool | None:
+        owner_oid = self._as_oid(owner_id, field_name="owner")
+        patient_oid = self._as_oid(patient_id)
+        entry_oid = self._as_oid(entry_id)
+        owned = await self._db.patients.find_one({"_id": patient_oid, "owner_id": owner_oid})
+        if owned is None:
+            return None
+        result = await self._db.measurements.delete_one(
+            {"_id": entry_oid, "patient_id": patient_oid}
+        )
+        return result.deleted_count > 0
+
     async def list_workout_plan_assignments(self, owner_id: str, patient_id: str) -> list[dict] | None:
         owner_oid = self._as_oid(owner_id, field_name="owner")
         patient_oid = self._as_oid(patient_id)

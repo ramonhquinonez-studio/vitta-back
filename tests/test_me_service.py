@@ -81,6 +81,13 @@ class _FakeMeRepository:
     async def list_measurements(self, patient_id, *, limit):
         return []
 
+    deleted_measurement_args = None
+    measurement_exists = True
+
+    async def delete_measurement(self, patient_id, entry_id):
+        self.deleted_measurement_args = (patient_id, entry_id)
+        return self.measurement_exists
+
     async def create_measurement(self, *, owner_id, patient_id, payload):
         self.created_measurement_payload = payload
         return {
@@ -364,6 +371,24 @@ class MeServiceTest(unittest.IsolatedAsyncioTestCase):
         service = MeService(repository)
         with self.assertRaises(PermissionError):
             await service.add_body_measurements("user-1", {"circumferences": {"arm": 30}})
+
+    async def test_delete_measurement_scopes_to_the_requesting_patient(self):
+        repository = _FakeMeRepository()
+        service = MeService(repository)
+
+        await service.delete_measurement("user-1", "measurement-1")
+
+        self.assertEqual(
+            repository.deleted_measurement_args, ("patient-1", "measurement-1")
+        )
+
+    async def test_delete_measurement_raises_when_entry_not_found(self):
+        repository = _FakeMeRepository()
+        repository.measurement_exists = False
+        service = MeService(repository)
+
+        with self.assertRaises(LookupError):
+            await service.delete_measurement("user-1", "bogus-id")
 
     async def test_update_profile_cannot_change_progress_log_enabled(self):
         # The /me router strips it; the service itself is agnostic, but this

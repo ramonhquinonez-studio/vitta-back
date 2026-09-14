@@ -284,6 +284,22 @@ async def add_body_measurements(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.delete("/measurements/{entry_id}", status_code=204)
+async def delete_measurement(
+    entry_id: str,
+    current=Depends(get_current_user),
+    service: MeService = Depends(get_me_service),
+):
+    """Undo a just-saved entry (weight/photo or circumference set) — the
+    "Deshacer" snackbar action right after a save (spec 072 follow-up)."""
+    try:
+        await service.delete_measurement(_user_id(current), entry_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/hydration", response_model=dict)
 async def my_hydration(
     current=Depends(get_current_user),
