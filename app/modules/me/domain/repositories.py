@@ -63,6 +63,9 @@ class MeRepository(Protocol):
     async def create_measurement(self, *, owner_id: str | None, patient_id: str, payload: dict) -> dict:
         ...
 
+    async def delete_measurement(self, patient_id: str, entry_id: str) -> bool:
+        ...
+
     async def list_measurements_since(self, patient_id: str, *, since: datetime) -> list[dict]:
         ...
 

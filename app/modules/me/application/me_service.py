@@ -397,6 +397,15 @@ class MeService:
             payload=payload,
         )
 
+    async def delete_measurement(self, user_id: str, entry_id: str) -> None:
+        """Undo a just-saved weight/photo or circumference entry (spec 072
+        follow-up) — used right after a save, from the "Deshacer" snackbar
+        action. Scoped to the requesting patient's own record."""
+        patient = await self._require_patient(user_id)
+        deleted = await self._repository.delete_measurement(patient["id"], entry_id)
+        if not deleted:
+            raise LookupError("Measurement entry not found")
+
     async def get_progress(self, user_id: str, range_value: str | None) -> dict[str, Any]:
         patient = await self._repository.get_patient_for_user(user_id)
         if not patient:

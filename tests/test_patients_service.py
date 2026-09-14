@@ -136,6 +136,17 @@ class _FakePatientsRepository:
         self.measurements.setdefault(patient_id, []).append(row)
         return row
 
+    async def delete_measurement(self, owner_id, patient_id, entry_id):
+        patient = await self.get_for_owner(owner_id, patient_id)
+        if patient is None:
+            return None
+        rows = self.measurements.get(patient_id, [])
+        for i, row in enumerate(rows):
+            if row.get("id") == entry_id:
+                rows.pop(i)
+                return True
+        return False
+
     async def list_checkin_responses(self, owner_id, patient_id):
         patient = await self.get_for_owner(owner_id, patient_id)
         if patient is None:
@@ -393,6 +404,39 @@ class PatientsServiceTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(LookupError):
             await service.add_measurement("owner-2", patient.id, {"circumferences": {"arm": 30}})
+
+    async def test_delete_measurement_removes_the_entry_for_an_owned_patient(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+        created = await service.add_measurement(
+            "owner-1", patient.id, {"circumferences": {"waist": 82.0}}
+        )
+
+        await service.delete_measurement("owner-1", patient.id, created["id"])
+
+        self.assertEqual(repository.measurements[patient.id], [])
+
+    async def test_delete_measurement_rejects_a_patient_not_owned(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+        created = await service.add_measurement(
+            "owner-1", patient.id, {"circumferences": {"waist": 82.0}}
+        )
+
+        with self.assertRaises(LookupError):
+            await service.delete_measurement("owner-2", patient.id, created["id"])
+        # Untouched — the rejected owner never got to the entry.
+        self.assertEqual(len(repository.measurements[patient.id]), 1)
+
+    async def test_delete_measurement_raises_when_entry_not_found(self):
+        repository = _FakePatientsRepository()
+        service = PatientsService(repository)
+        patient = await repository.create_for_owner("owner-1", {"name": "Maria"})
+
+        with self.assertRaises(LookupError):
+            await service.delete_measurement("owner-1", patient.id, "bogus-id")
 
     async def test_list_checkin_responses_returns_the_patients_submitted_responses(self):
         repository = _FakePatientsRepository()

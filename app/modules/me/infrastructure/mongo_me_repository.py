@@ -227,6 +227,16 @@ class MongoMeRepository:
         document["_id"] = result.inserted_id
         return self._serialize_measurement(document)
 
+    async def delete_measurement(self, patient_id: str, entry_id: str) -> bool:
+        patient_oid = self._as_oid(patient_id)
+        entry_oid = self._as_oid(entry_id)
+        # Filtering on patient_id (not just _id) means a patient can never
+        # delete another patient's entry, even by guessing a valid ObjectId.
+        result = await self._db.measurements.delete_one(
+            {"_id": entry_oid, "patient_id": patient_oid}
+        )
+        return result.deleted_count > 0
+
     async def list_measurements_since(self, patient_id: str, *, since: datetime) -> list[dict]:
         patient_oid = self._as_oid(patient_id)
         cursor = self._db.measurements.find(

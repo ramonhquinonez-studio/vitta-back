@@ -394,6 +394,23 @@ async def add_patient_measurement(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.delete("/{patient_id}/measurements/{entry_id}", status_code=204)
+async def delete_patient_measurement(
+    patient_id: str,
+    entry_id: str,
+    current=Depends(get_current_user),
+    service: PatientsService = Depends(get_patients_service),
+):
+    """Undo a just-saved measurement entry — the "Deshacer" snackbar action
+    right after a save (spec 072 follow-up)."""
+    try:
+        await service.delete_measurement(_owner_id(current), patient_id, entry_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/{patient_id}/checkin-responses", response_model=list[dict])
 async def list_patient_checkin_responses(
     patient_id: str,
